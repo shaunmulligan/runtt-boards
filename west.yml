@@ -1,0 +1,37 @@
+# West manifest for the balena MCU firmware side.
+#
+# Zephyr is pinned to an exact tag, never a branch. Minor releases have already
+# moved behaviour under this project twice: the flash simulator's
+# erase-at-start default changed between 4.3 and 4.4, and MCUboot's swap mode
+# default became swap-using-offset. A bump is a deliberate, tested step.
+manifest:
+  remotes:
+    - name: upstream
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: upstream
+      revision: v4.4.2
+      import:
+        # Only what we actually build for: native_sim needs no HAL, and the
+        # hardware targets are nRF52840 and RP2040.
+        name-allowlist:
+          # zcbor is not optional: MCUmgr's root Kconfig symbol depends on it,
+          # and without it CONFIG_MCUMGR silently does not exist rather than
+          # failing loudly.
+          - zcbor
+          - cmsis
+          - cmsis_6
+          - hal_nordic
+          - hal_rpi_pico
+          - mcuboot
+          - picolibc
+          - segger
+          # MCUboot's signing and crypto for the hardware targets.
+          - mbedtls
+          - tinycrypt
+
+  self:
+    path: firmware
+    west-commands: ""
