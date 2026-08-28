@@ -29,7 +29,12 @@ manifest:
           - picolibc
           - segger
           # MCUboot's signing and crypto for the hardware targets.
+          # tf-psa-crypto is NOT optional alongside mbedtls: since mbedtls 4.x it
+          # is a separate repository rather than a subdirectory, and without it
+          # mbedtls's CMakeLists fails with "tf-psa-crypto is not an existing
+          # directory". Same trap as zcbor -- an allowlist that looks complete.
           - mbedtls
+          - tf-psa-crypto
           - tinycrypt
 
   self:
