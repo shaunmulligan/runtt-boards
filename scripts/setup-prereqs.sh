@@ -11,6 +11,9 @@
 #   ./scripts/setup-prereqs.sh            # show a plan, confirm, then do it
 #   ./scripts/setup-prereqs.sh --check    # verify only, change nothing
 #   ./scripts/setup-prereqs.sh --yes      # no confirmation prompt
+#   ./scripts/setup-prereqs.sh --skip-tools   # skip pyocd/probe-rs (probe-rs
+#                                             # compiles, which takes minutes,
+#                                             # and Track A needs no probe)
 #
 # Deliberately NOT done here: anything destructive to a board. Replacing the
 # Feather's UF2 bootloader and the flash/UICR backup that must precede it are a
@@ -29,10 +32,12 @@ APT_PACKAGES=(pkg-config libudev-dev python3-pip python3-venv)
 
 CHECK_ONLY=0
 ASSUME_YES=0
+SKIP_TOOLS=0
 for arg in "$@"; do
   case "$arg" in
     --check) CHECK_ONLY=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
+    --skip-tools) SKIP_TOOLS=1 ;;
     --help|-h) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
@@ -90,8 +95,10 @@ if lsusb -d "$PROBE_VID_PID" >/dev/null 2>&1; then
 fi
 
 NEED_TOOLS=()
-command -v pyocd    >/dev/null || NEED_TOOLS+=(pyocd)
-command -v probe-rs >/dev/null || NEED_TOOLS+=(probe-rs)
+if [[ $SKIP_TOOLS -eq 0 ]]; then
+  command -v pyocd    >/dev/null || NEED_TOOLS+=(pyocd)
+  command -v probe-rs >/dev/null || NEED_TOOLS+=(probe-rs)
+fi
 
 # ============================================================================
 # Report
@@ -135,7 +142,9 @@ else
 fi
 
 head2 "4. Probe tooling (no sudo)"
-if [[ ${#NEED_TOOLS[@]} -eq 0 ]]; then
+if [[ $SKIP_TOOLS -eq 1 ]]; then
+  note "skipped (--skip-tools); only needed for SWD work, not for USB bring-up"
+elif [[ ${#NEED_TOOLS[@]} -eq 0 ]]; then
   ok "pyocd and probe-rs present"
 else
   todo "install: ${NEED_TOOLS[*]}"
