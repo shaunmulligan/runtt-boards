@@ -59,26 +59,15 @@ build_mcuboot() {
   fi
   [[ -f "$signed" ]] && echo "  signed image: $(stat -c %s "$signed") bytes  ($signed)"
 
-  # A single provisioning image: MCUboot plus a signed app already in slot 0.
-  #
-  # This is the "flashing balenaOS for MCUs" moment from the plan -- one
-  # physical act, everything after it remote. Done over BOOTSEL rather than SWD,
-  # so it needs no probe at all, which is a real advantage of starting on RP2040.
-  #
-  # It has to be built from the HEX files, not by concatenating the per-image
-  # UF2s: the app's own zephyr.uf2 is emitted with a target address of
-  # 0x00020000, which is neither the XIP window nor slot0's offset. The hex
-  # extents are correct (0x10010000), so merge those and convert once.
-  local merged=build-pico-mcuboot/provision.hex
-  local provision=build-pico-mcuboot/provision.uf2
-  python3 "$ZEPHYR_BASE/scripts/build/mergehex.py" -o "$merged" \
-    build-pico-mcuboot/mcuboot/zephyr/zephyr.hex \
-    "$(dirname "$signed")/zephyr.signed.hex" >/dev/null
-  python3 "$ZEPHYR_BASE/scripts/build/uf2conv.py" -c -f RP2040 \
-    -o "$provision" "$merged" >/dev/null
-  echo "  provisioning image: $provision ($(stat -c %s "$provision") bytes)"
+  # A single provisioning image: MCUboot plus a CONFIRMED app in slot 0.
+  # See scripts/make-provision-uf2.py for why it is built from the hex files and
+  # why the trailer matters.
+  python3 scripts/make-provision-uf2.py \
+    --zephyr-base "$ZEPHYR_BASE" \
+    --objcopy "$ZEPHYR_SDK_INSTALL_DIR/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy"
   echo "    hold BOOTSEL, plug in, then:"
-  echo "      cp $provision \"\$(findmnt -rn -o TARGET /dev/sda1)/\""
+  echo "      cp build-pico-mcuboot/provision.uf2 \"\$(findmnt -rn -o TARGET /dev/sda1)/\""
+  echo
 
   # Loud, every build: an image signed with a public private key is not signed.
   local key
