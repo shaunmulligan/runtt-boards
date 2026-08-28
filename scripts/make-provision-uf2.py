@@ -11,9 +11,16 @@ Two details this exists to get right:
 
 * An image flashed straight into the PRIMARY slot is the running image, not a
   candidate awaiting a test, so it needs a padded trailer marked **confirmed**.
-  Sysbuild does not emit that variant here, so we produce it with imgtool and
-  place just the trailer at the end of the slot -- writing 800 KB of 0xff
-  padding would work but makes a needlessly large image and a slow flash.
+  Sysbuild does not emit that variant here, so we produce it with imgtool.
+
+* The result is written as ONE CONTIGUOUS REGION, padding the gaps with 0xff.
+  A sparse UF2 covering the same bytes in three disjoint regions is structurally
+  valid -- sequential blockNo, correct numBlocks, legitimate address gaps -- and
+  was accepted without complaint, but the second region did not reach flash.
+  Reproduced twice on an RP2040; every single-region image we have flashed
+  worked. Rather than fight the bootrom, emit one region. It costs a larger file
+  and a slower flash, and it has the side benefit of leaving the slot properly
+  erased.
 """
 import argparse
 import pathlib
@@ -21,6 +28,7 @@ import subprocess
 import sys
 import tempfile
 
+FLASH_BASE = 0x10000000
 SLOT0_ADDR = 0x10010000
 SLOT0_SIZE = 0xD0000
 TRAILER_LEN = 64
@@ -28,6 +36,23 @@ TRAILER_LEN = 64
 
 def run(cmd, **kw):
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, **kw)
+
+
+def read_hex(path):
+    """Minimal Intel HEX reader: {absolute address: bytes}."""
+    out, base = {}, 0
+    for line in open(path):
+        line = line.strip()
+        if not line.startswith(":"):
+            continue
+        n = int(line[1:3], 16)
+        addr = int(line[3:7], 16)
+        rec = int(line[7:9], 16)
+        if rec == 4:
+            base = int(line[9:13], 16) << 16
+        elif rec == 0:
+            out[base + addr] = bytes.fromhex(line[9:9 + 2 * n])
+    return out
 
 
 def main() -> int:
@@ -69,25 +94,23 @@ def main() -> int:
                 body_end = i - run_len + 1
                 break
 
-        body, trailer = td / "body.bin", td / "trailer.bin"
-        body.write_bytes(data[:body_end])
-        trailer.write_bytes(data[-TRAILER_LEN:])
+        # Flatten everything into one image starting at the flash base: the
+        # bootloader, the gap, the app, its padding, and the confirmed trailer.
+        boot = read_hex(boot_hex)
+        flat = bytearray(b"\xff" * (SLOT0_ADDR - FLASH_BASE + SLOT0_SIZE))
+        for addr, chunk in boot.items():
+            flat[addr - FLASH_BASE:addr - FLASH_BASE + len(chunk)] = chunk
+        flat[SLOT0_ADDR - FLASH_BASE:SLOT0_ADDR - FLASH_BASE + len(data)] = data
 
-        body_hex, trailer_hex, merged = td / "body.hex", td / "trailer.hex", td / "merged.hex"
-        run([args.objcopy, "-I", "binary", "-O", "ihex",
-             "--change-addresses", hex(SLOT0_ADDR), str(body), str(body_hex)])
-        run([args.objcopy, "-I", "binary", "-O", "ihex",
-             "--change-addresses", hex(SLOT0_ADDR + SLOT0_SIZE - TRAILER_LEN),
-             str(trailer), str(trailer_hex)])
-        run([sys.executable, str(zbase / "scripts/build/mergehex.py"), "-o", str(merged),
-             str(boot_hex), str(body_hex), str(trailer_hex)])
+        flat_bin = td / "flat.bin"
+        flat_bin.write_bytes(bytes(flat))
         run([sys.executable, str(zbase / "scripts/build/uf2conv.py"), "-c", "-f", "RP2040",
-             "-o", str(out), str(merged)])
+             "-b", hex(FLASH_BASE), "-o", str(out), str(flat_bin)])
 
     print(f"  provisioning image: {out} ({out.stat().st_size} bytes)")
-    print(f"    boot2 + MCUboot   {0x10000000:#010x}")
-    print(f"    app in slot 0     {SLOT0_ADDR:#010x}  ({body_end} bytes)")
-    print(f"    confirmed trailer {SLOT0_ADDR + SLOT0_SIZE - TRAILER_LEN:#010x}")
+    print(f"    one contiguous region {FLASH_BASE:#010x} .. "
+          f"{SLOT0_ADDR + SLOT0_SIZE:#010x}")
+    print(f"    boot2 + MCUboot, app in slot 0 ({body_end} bytes), confirmed trailer")
     return 0
 
 
