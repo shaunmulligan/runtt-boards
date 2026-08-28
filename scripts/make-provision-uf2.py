@@ -58,7 +58,9 @@ def read_hex(path):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--build-dir", default="build-pico-mcuboot")
+    ap.add_argument("--build-dir", default="build-pico-idle")
+    ap.add_argument("--image", default=None,
+                    help="sysbuild image name (defaults to the sole non-mcuboot image)")
     ap.add_argument("--zephyr-base", default="zephyr")
     ap.add_argument("--mcuboot", default="bootloader/mcuboot")
     ap.add_argument("--key", default="bootloader/mcuboot/root-rsa-2048.pem")
@@ -68,7 +70,21 @@ def main() -> int:
 
     build = pathlib.Path(args.build_dir)
     zbase = pathlib.Path(args.zephyr_base)
-    app_bin = build / "app/zephyr/zephyr.bin"
+
+    # Sysbuild names the application image after its directory, so do not
+    # hardcode "app" -- the provisioning payload is balena-mcu-idle.
+    image = args.image
+    if image is None:
+        candidates = sorted(
+            d.name for d in build.iterdir()
+            if d.is_dir() and d.name != "mcuboot" and (d / "zephyr/zephyr.bin").exists()
+        )
+        if len(candidates) != 1:
+            print(f"cannot pick an image from {candidates}; pass --image", file=sys.stderr)
+            return 1
+        image = candidates[0]
+
+    app_bin = build / image / "zephyr/zephyr.bin"
     boot_hex = build / "mcuboot/zephyr/zephyr.hex"
     out = pathlib.Path(args.output or (build / "provision.uf2"))
 
@@ -108,6 +124,7 @@ def main() -> int:
              "-b", hex(FLASH_BASE), "-o", str(out), str(flat_bin)])
 
     print(f"  provisioning image: {out} ({out.stat().st_size} bytes)")
+    print(f"    payload: {image}")
     print(f"    one contiguous region {FLASH_BASE:#010x} .. "
           f"{SLOT0_ADDR + SLOT0_SIZE:#010x}")
     print(f"    boot2 + MCUboot, app in slot 0 ({body_end} bytes), confirmed trailer")

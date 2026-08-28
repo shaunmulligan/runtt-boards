@@ -18,8 +18,8 @@ no vendor tooling. It also makes the board effectively unbrickable: a failed
 flash leaves you in BOOTSEL, ready to try again.
 
 ```bash
-./scripts/build-pico.sh mcuboot          # produces build-pico-mcuboot/provision.uf2
-./scripts/flash-pico.sh build-pico-mcuboot/provision.uf2
+./scripts/build-pico.sh provision        # produces build-pico-idle/provision.uf2
+./scripts/flash-pico.sh build-pico-idle/provision.uf2
 ```
 
 Verify:
@@ -61,6 +61,15 @@ empty primary slot halts with `Unable to find bootable image`, and — because i
 has no USB of its own — does so **completely silently**. No enumeration, no
 device node, nothing. A board in that state is indistinguishable from one that is
 unplugged or dead.
+
+`balena-mcu-idle` (`firmware/idle/`) is that application: the module plus a
+no-op main. It reports `idle: true` over `describe`, so the runtime can say
+
+    device is rpi_pico/rp2040/mcuboot freshly provisioned, awaiting its first firmware
+
+rather than treating a factory-fresh board as though it were running something
+unrecognised. Those two states look identical otherwise and warrant completely
+different reactions.
 
 Shipping an app in slot 0 means an unprovisioned-but-working board *enumerates*,
 answers `describe`, and waits. It shows up as a service reporting a clear error
@@ -125,7 +134,7 @@ addressed.
 > Since provisioning is precisely when the trust root is set, a per-fleet key has
 > to be in place *before* boards are provisioned: the public half is baked into
 > MCUboot at this step, so changing it later means re-flashing every board over
-> SWD. See the note in `firmware/app/sysbuild.conf`.
+> SWD. See the note in `firmware/sysbuild-common.conf`.
 
 ---
 

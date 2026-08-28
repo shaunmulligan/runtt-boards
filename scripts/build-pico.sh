@@ -3,7 +3,11 @@
 #
 # Two configurations, because they prove different things:
 #
-#   bringup  plain `rpi_pico`. No bootloader, no slots, so no image management.
+#   provision  balena-mcu-idle under sysbuild, emitted as a single UF2. This is
+             what a customer flashes over BOOTSEL to make a board manageable.
+             See docs/PROVISIONING.md.
+
+  bringup  plain `rpi_pico`. No bootloader, no slots, so no image management.
 #            Boots standalone, which is what you want while proving USB
 #            enumeration, the interface string descriptors and the udev rules.
 #            Flashable by drag-and-drop via BOOTSEL -- no probe required.
@@ -69,23 +73,47 @@ build_mcuboot() {
   echo "      cp build-pico-mcuboot/provision.uf2 \"\$(findmnt -rn -o TARGET /dev/sda1)/\""
   echo
 
-  # Loud, every build: an image signed with a public private key is not signed.
+  warn_dev_key build-pico-mcuboot
+}
+
+# Loud, every build: an image signed with a publicly known private key is not
+# meaningfully signed, and provisioning is exactly when the trust root is set.
+warn_dev_key() {
   local key
   key=$(grep -oP '(?<=^CONFIG_BOOT_SIGNATURE_KEY_FILE=").*(?=")' \
-        build-pico-mcuboot/mcuboot/zephyr/.config 2>/dev/null || true)
+        "$1/mcuboot/zephyr/.config" 2>/dev/null || true)
   if [[ "$key" == *"/bootloader/mcuboot/root-"* ]]; then
     echo
     echo "  !! Signed with MCUboot's DEVELOPMENT key:"
     echo "     $key"
     echo "     That private key is public. Any image signed with it will verify,"
     echo "     so no trust root is enrolled. Fine for the bench; never for a fleet."
-    echo "     See the signing note in firmware/app/sysbuild.conf."
+    echo "     See firmware/sysbuild-common.conf."
   fi
 }
 
+build_provision() {
+  echo "=== provision: balena-mcu-idle + MCUboot, one flashable image ==="
+  west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild firmware/idle \
+    -d build-pico-idle -- \
+    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/balena-mcu" \
+    -Didle_SNIPPET=balena-mcu
+  echo
+  python3 scripts/make-provision-uf2.py \
+    --build-dir build-pico-idle \
+    --zephyr-base "$ZEPHYR_BASE" \
+    --objcopy "$ZEPHYR_SDK_INSTALL_DIR/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy" \
+    -o build-pico-idle/provision.uf2
+  echo
+  echo "  flash it with:  ./scripts/flash-pico.sh build-pico-idle/provision.uf2"
+  echo "  (hold BOOTSEL while plugging the board in first)"
+  warn_dev_key build-pico-idle
+}
+
 case "$MODE" in
-  bringup) build_bringup ;;
-  mcuboot) build_mcuboot ;;
-  both)    build_bringup; echo; build_mcuboot ;;
-  *) echo "usage: $0 [bringup|mcuboot|both]" >&2; exit 2 ;;
+  bringup)   build_bringup ;;
+  mcuboot)   build_mcuboot ;;
+  provision) build_provision ;;
+  both)      build_bringup; echo; build_mcuboot ;;
+  *) echo "usage: $0 [bringup|mcuboot|provision|both]" >&2; exit 2 ;;
 esac
