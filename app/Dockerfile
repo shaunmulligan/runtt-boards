@@ -11,8 +11,12 @@ WORKDIR /ws
 COPY west.yml /ws/firmware/west.yml
 RUN west init -l firmware && west update --narrow -o=--depth=1
 COPY . /ws/firmware/
-RUN west build -b "${BOARD}" --sysbuild -S balena-mcu firmware/app \
-      -- -DSB_CONFIG_BOOTLOADER_MCUBOOT=y \
+# -Dapp_SNIPPET rather than -S: under sysbuild a top-level snippet applies to
+# EVERY image, which would pull MCUmgr, this module and a dual CDC composite
+# into the bootloader.
+RUN west build -b "${BOARD}" --sysbuild firmware/app \
+      -- -Dapp_SNIPPET=balena-mcu \
+         -DSB_CONFIG_BOOTLOADER_MCUBOOT=y \
          -DSB_CONFIG_MCUBOOT_MODE_SWAP_USING_OFFSET=y
 
 FROM scratch
