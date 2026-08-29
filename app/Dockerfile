@@ -5,11 +5,24 @@
 # runtime reads. Deltas are computed on full image content rather than per
 # layer, so a single-layer blob is the best case for update size.
 
-FROM ghcr.io/zephyrproject-rtos/ci:v0.28.4 AS builder
+# v0.29.3 ships Zephyr SDK 1.0.1. The SDK went 1.x, and Zephyr v4.4.2 requires
+# "1.0" exactly -- an older CI image (v0.28.4 carries SDK 0.17.4) fails at
+# configure with "Could not find a configuration file for package Zephyr-sdk
+# compatible with requested version 1.0". Bump this tag and the west.yml Zephyr
+# pin together.
+#
+# docker.io rather than ghcr.io: ghcr rate-limited this image hard enough to
+# fail the pull outright ("toomanyrequests"). Same image, same blob digests.
+FROM docker.io/zephyrprojectrtos/ci:v0.29.3 AS builder
 ARG BOARD=adafruit_feather_nrf52840/nrf52840
 WORKDIR /ws
 COPY west.yml /ws/firmware/west.yml
 RUN west init -l firmware && west update --narrow -o=--depth=1
+# The CI image ships a Python venv but not Zephyr's own requirements, and the
+# build fails at configure time with "Missing jsonschema dependency" without
+# them -- zephyr_module.cmake uses jsonschema to validate module.yml. `pip` here
+# resolves to /opt/python/venv/bin/pip, which is the interpreter cmake uses.
+RUN pip install --no-cache-dir -r /ws/zephyr/scripts/requirements-base.txt
 COPY . /ws/firmware/
 # -Dapp_SNIPPET rather than -S: under sysbuild a top-level snippet applies to
 # EVERY image, which would pull MCUmgr, this module and a dual CDC composite
