@@ -1,9 +1,18 @@
 # MCUboot hangs in `find_last_idx()` — swap-using-offset, RP2040
 
 Draft of an upstream report, with a fix carried as a patch in
-`firmware/patches/`. **The defect is real and the fix is verified; it is not the
-whole cause of the hardware failure we were chasing.** Both statements matter and
-the section at the end separates them.
+`firmware/patches/`.
+
+**Scope, stated plainly.** `find_last_idx()` is genuinely unbounded and MCUboot
+was observed spinning in it on hardware. But it was **not** the cause of the
+deploy failure that led us here -- that turned out to be a malformed test image
+of our own making (see `docs/HARDWARE_GATE.md`), and **MCUboot swap on RP2040
+works correctly with a well-formed image**, verified end to end.
+
+So this is a robustness report, not a "MCUboot is broken" report: a bootloader
+should not hang unrecoverably on a corrupt or erased trailer, whatever put it in
+that state. Frame it that way upstream, because the stronger claim is not true
+and a maintainer will find that out.
 
 ## Summary
 
