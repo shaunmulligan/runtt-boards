@@ -100,6 +100,44 @@ not yet established.
 from an earlier commit of this project that had recorded a working deploy cycle
 on the same board, so it is not a regression in application configuration.
 
+## Second defect: the swapped image lands 0x200 bytes too far in
+
+Found after the `find_last_idx` fix let the bootloader get far enough to
+actually perform the swap. This is the one that produces the lockup.
+
+Read over SWD at a `reset halt`, so XIP is up and the reads are trustworthy:
+
+```
+slot 1 (source)              slot 0 (destination, after the failed swap)
+0x100e0000: 96f3b83d hdr     0x10010000: 96f3b83d   header magic ok
+                             0x100101f0: ffffffff   header NOT fully written
+0x100e0200: 20003890 <-- SP  0x10010200: 00000000   512 bytes of programmed zeros
+0x100e0204: 10012141 <-- PC  0x10010300: 00000000
+                             0x10010400: 20003890   <-- the image starts HERE
+                             0x10010404: 10012141
+```
+
+`slot0 + 0x400` matches `slot1 + 0x200` word for word. The image was copied, but
+written **0x200 bytes too far in — exactly one image-header length.**
+
+The consequence is the lockup. MCUboot chain-loads the primary at
+`slot_start + hdr_size` (`0x10010200`), which now holds zeros. It loads `SP = 0`
+and `PC = 0` from that blank vector table, faults immediately, and cannot service
+the fault, so the core ends in Cortex-M lockup. Every register matches:
+`SP = 0xffffffe0` (zero, less a 32-byte exception frame), `xpsr` exception 3
+(HardFault), `pc = 0xfffffffe`.
+
+Note the zeros are *programmed*, not erased — erased NOR reads `0xFF` — so
+something deliberately wrote 512 bytes of zeros into the gap it left.
+
+**A measurement warning for anyone reproducing this.** Flash reads taken while
+the core is locked up, or while it sits inside a bootrom flash routine, are not
+trustworthy: those routines run with XIP disabled, and reads through the XIP
+window then return garbage. The same address read `0x00000000` and `0x00070000`
+on consecutive samples during the swap. Take every flash reading at a
+`reset halt`, and sanity-check that boot2 at `0x10000000` reads plausibly before
+believing anything else.
+
 ## The fix, and what it does and does not resolve
 
 `firmware/patches/mcuboot/0001-bound-find_last_idx-loops.patch` guards both
