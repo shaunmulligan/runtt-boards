@@ -1,0 +1,19 @@
+# Patches applied to west modules on top of their pinned revisions.
+#
+# Deliberately a patch set rather than a fork: `west update` restores upstream,
+# and `west patch apply` re-applies this. The only thing maintained here is the
+# diff, which should disappear once the fix lands upstream.
+#
+#   west patch apply -l firmware/patches.yml -b firmware/patches
+#
+# Verify with `west patch list`; `west patch clean` reverts modules to their
+# pinned revision.
+patches:
+  - path: mcuboot/0001-bound-find_last_idx-loops.patch
+    sha256sum: 3e005fb30293d87acd2e3e5ccb0d8db4602159cbcb3167201eed8fa5a12d40c0
+    module: mcuboot
+    author: balena
+    email: shaun.mulligan@balena.io
+    date: 2026-08-29
+    upstreamable: true
+    # Add `issue:` with the upstream URL once filed (schema requires a URL).

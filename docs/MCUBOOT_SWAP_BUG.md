@@ -1,8 +1,9 @@
 # MCUboot hangs in `find_last_idx()` — swap-using-offset, RP2040
 
-Draft of an upstream report. **Reproduced on hardware; not yet reproduced in
-MCUboot's simulator**, which is the next step and the form the report should
-take before filing.
+Draft of an upstream report, with a fix carried as a patch in
+`firmware/patches/`. **The defect is real and the fix is verified; it is not the
+whole cause of the hardware failure we were chasing.** Both statements matter and
+the section at the end separates them.
 
 ## Summary
 
@@ -99,6 +100,33 @@ not yet established.
 from an earlier commit of this project that had recorded a working deploy cycle
 on the same board, so it is not a regression in application configuration.
 
+## The fix, and what it does and does not resolve
+
+`firmware/patches/mcuboot/0001-bound-find_last_idx-loops.patch` guards both
+copies of the function: it returns early on a zero sector size and bounds the
+walk by the primary slot's own sector count, so the loop terminates for any
+input and can never return an index beyond a real sector.
+
+**Verified:**
+
+* MCUboot's own simulator passes 25/25 with the patch, under **both**
+  `swap-offset` and `swap-move`. No regression.
+* On hardware the behaviour demonstrably changes. Without the patch the
+  bootloader spins in `find_last_idx` (4 of 4 PC samples inside a
+  three-instruction window). With it, it no longer spins there.
+
+**Not resolved:** the deploy still fails. With the patch applied the bootloader
+gets past this function and then ends in `Lockup` instead, with slot 0's vector
+table reading zeros. So the unbounded loop is a genuine defect worth fixing on
+its own terms, but something further along the swap path is also wrong, and that
+is still open.
+
+An earlier version of this patch only guarded the arithmetic overflow. That was
+worse than useless: with `swap_size = 0xFFFFFFFF` it let `last_idx` climb to
+about a million before breaking, returning a nonsense sector index for callers
+to use. Bounding by the sector count is the part that makes the result safe, not
+just terminating.
+
 ## Suggested fix
 
 Guard the loop rather than trusting the trailer:
@@ -127,15 +155,27 @@ region. Also unproven: the relationship between the hang and the `Lockup`
 variant, and whether `sector_sz` is 0 here rather than `swap_size` being
 invalid. Either input reproduces the hang, and the fix should cover both.
 
-## Next step before filing
+## On reproducing it in the simulator
 
-Reproduce in [`mcuboot/sim/`](https://github.com/mcu-tools/mcuboot/tree/main/sim).
-It compiles the real `bootutil` sources over a NOR-flash model with injectable
-failures, and this project's CI already builds and runs it. A test that stages an
-image with a corrupted or erased trailer and asserts the bootloader terminates
-would turn this from a hardware anecdote into a deterministic upstream test case
-— which is worth far more to the maintainers, and would confirm which of the two
-inputs is at fault.
+Attempted, and worth recording as a negative result: the simulator's existing
+25 scenarios **pass** under `swap-offset`, so they never feed `find_last_idx` a
+corrupt trailer. The bad input comes from real-world flash state its model does
+not produce.
+
+A proper regression test would therefore need to inject an erased or corrupted
+`swap_size` into the trailer and assert the bootloader terminates. That is the
+right thing to offer upstream alongside the patch, and it is not yet written.
+The defect itself does not depend on it — the loop is unbounded by inspection —
+but a deterministic test is what makes a report easy for a maintainer to accept.
+
+## Filing checklist
+
+* [x] Fix written and carried as a patch, both swap modes
+* [x] Simulator green with the fix (25/25, `swap-offset` and `swap-move`)
+* [x] Behaviour change confirmed on hardware
+* [ ] Regression test injecting a corrupt trailer
+* [ ] Confirm which input is bad (`swap_size` vs `sector_sz`) — see caveats above
+* [ ] File upstream, then add the URL to `firmware/patches.yml` as `issue:`
 
 ---
 

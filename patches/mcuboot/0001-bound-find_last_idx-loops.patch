@@ -1,0 +1,84 @@
+diff --git a/boot/bootutil/src/swap_move.c b/boot/bootutil/src/swap_move.c
+index c1b21d3..41fbe49 100644
+--- a/boot/bootutil/src/swap_move.c
++++ b/boot/bootutil/src/swap_move.c
+@@ -53,8 +53,27 @@ find_last_idx(struct boot_loader_state *state, uint32_t swap_size)
+     uint32_t sector_sz;
+     uint32_t sz;
+     uint32_t last_idx;
++    uint32_t max_idx;
+ 
+     sector_sz = boot_img_sector_size(state, BOOT_SLOT_PRIMARY, 0);
++
++    /* `swap_size` comes from the image trailer. On erased or corrupted flash it
++     * reads 0xFFFFFFFF, and a zero sector size is possible if the sector layout
++     * was never loaded. Either input leaves the loop below unable to terminate:
++     * `sz` either never advances, or overflows past the exit condition and wraps
++     * forever. The bootloader then spins with no watchdog and no way to recover
++     * the device, which is strictly worse than declining to swap.
++     *
++     * Bound the walk by the slot's own sector count so the result can never
++     * exceed a valid sector index either.
++     */
++    if (sector_sz == 0U) {
++        return 0;
++    }
++
++    max_idx = boot_img_num_sectors(state, BOOT_SLOT_PRIMARY);
++    max_idx = (max_idx > 0U) ? (max_idx - 1U) : 0U;
++
+     sz = 0;
+     last_idx = 0;
+     while (1) {
+@@ -63,6 +82,9 @@ find_last_idx(struct boot_loader_state *state, uint32_t swap_size)
+         if (sz >= swap_size) {
+             break;
+         }
++        if (last_idx > max_idx) {
++            break;
++        }
+     }
+ 
+     return last_idx;
+diff --git a/boot/bootutil/src/swap_offset.c b/boot/bootutil/src/swap_offset.c
+index eda68ab..a3f51ca 100644
+--- a/boot/bootutil/src/swap_offset.c
++++ b/boot/bootutil/src/swap_offset.c
+@@ -61,8 +61,27 @@ uint32_t find_last_idx(struct boot_loader_state *state, uint32_t swap_size)
+     uint32_t sector_sz;
+     uint32_t sz;
+     uint32_t last_idx;
++    uint32_t max_idx;
+ 
+     sector_sz = boot_img_sector_size(state, BOOT_SLOT_PRIMARY, 0);
++
++    /* `swap_size` comes from the image trailer. On erased or corrupted flash it
++     * reads 0xFFFFFFFF, and a zero sector size is possible if the sector layout
++     * was never loaded. Either input leaves the loop below unable to terminate:
++     * `sz` either never advances, or overflows past the exit condition and wraps
++     * forever. The bootloader then spins with no watchdog and no way to recover
++     * the device, which is strictly worse than declining to swap.
++     *
++     * Bound the walk by the slot's own sector count so the result can never
++     * exceed a valid sector index either.
++     */
++    if (sector_sz == 0U) {
++        return 0;
++    }
++
++    max_idx = boot_img_num_sectors(state, BOOT_SLOT_PRIMARY);
++    max_idx = (max_idx > 0U) ? (max_idx - 1U) : 0U;
++
+     sz = 0;
+     last_idx = 0;
+ 
+@@ -71,6 +90,9 @@ uint32_t find_last_idx(struct boot_loader_state *state, uint32_t swap_size)
+         if (sz >= swap_size) {
+             break;
+         }
++        if (last_idx >= max_idx) {
++            break;
++        }
+         last_idx++;
+     }
+ 
