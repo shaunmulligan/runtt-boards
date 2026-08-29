@@ -82,29 +82,96 @@ provisioning time.
 
 ## Adafruit Feather nRF52840 — probe required
 
-The nRF52840 has **no USB ROM loader**, so there is no drag-and-drop equivalent.
-Provisioning needs SWD, and flashing MCUboot to `0x0` destroys the Adafruit UF2
-bootloader, the MBR and the bootloader settings page.
+The nRF52840 has **no USB ROM loader**, so there is no drag-and-drop equivalent
+and no BOOTSEL to fall back on. Every flash needs SWD, and flashing MCUboot to
+`0x0` destroys the Adafruit UF2 bootloader, the MBR and the bootloader settings
+page.
 
-Before the first flash, back up **flash and UICR** — the latter holds
-`BOOTLOADERADDR`, without which a restored flash leaves the bootloader
-unfindable:
+The flow is three commands, in this order:
 
 ```bash
-pyocd cmd -t nrf52840 -c "savemem 0x0 0x100000 flash_full.bin"
-pyocd cmd -t nrf52840 -c "savemem 0x10001000 0x400 uicr.bin"
-sha256sum *.bin | tee BACKUP.sha256
+./scripts/backup-nrf52840.sh          # FIRST. Not optional.
+./scripts/build-feather.sh provision
+./scripts/flash-feather.sh build-feather-idle
 ```
 
-Also read `FICR.INFO.VARIANT` (`0x10000130`) and `UICR.APPROTECT` (`0x10001208`)
-first: nRF52840 revision 3 ships with access-port protection enabled, and a true
-chip-erase resets `UICR.APPROTECT` and locks the part at the next reset.
-Recovery does not need a J-Link — both pyOCD and probe-rs implement the CTRL-AP
-unlock over CMSIS-DAP — but it is destructive, hence the backup.
+`flash-feather.sh` refuses to run if it cannot find a backup directory.
+
+### Why the backup is not boilerplate
+
+Recovery from a locked part is a **CTRL-AP `ERASEALL`**, which wipes flash *and*
+UICR. UICR holds `BOOTLOADERADDR`, so a flash restored without it leaves the
+Adafruit bootloader physically present but unfindable. `backup-nrf52840.sh`
+takes both, checksums them, and refuses to call an all-`0xff` read a backup.
+
+It also reads `FICR.INFO.VARIANT` (`0x10000130`) and `UICR.APPROTECT`
+(`0x10001208`) before touching anything. A build code ending `F0` means a
+revision 3 part, where APPROTECT is enabled in hardware at every reset.
+
+### The one way to actually get stuck
+
+Per Nordic, after an `ERASEALL` *"the device should be accessible to a debugger
+until it executes a pin, power, or brownout reset"*. So if the part re-locks
+between the erase and the write, you need the **nRESET** line to control the
+timing. There is a [DevZone case][devzone-nreset] where a custom board did not
+route nRESET and the thread ends with no successful recovery.
+
+**The Feather routes RESET** — button and header pin — so that deadlock does not
+apply here. Two rules follow:
+
+* **Never reset between an erase and writing firmware.** `flash-feather.sh`
+  sends both images in one pyocd session for exactly this reason.
+* **Never set `CONFIG_NRF_APPROTECT_LOCK`** (`zephyr/soc/nordic/Kconfig`). It
+  locks the debug port from `SystemInit()` on every boot. Zephyr's nRF52 default
+  is `NRF_APPROTECT_USE_UICR`, which is the safe one.
+
+Neither pyOCD nor probe-rs needs a J-Link for the unlock; both implement CTRL-AP
+over CMSIS-DAP.
+
+### Can the Adafruit bootloader be kept?
+
+Not usefully. There is a `uf2` board variant, but its layout
+(`nordic/nrf52840_partition_uf2_sdv6.dtsi`) is:
+
+```
+0x00000  SoftDevice s140 v6    152 KB   read-only
+0x26000  Application           792 KB
+0xec000  Storage                32 KB
+0xf4000  UF2 bootloader         48 KB   read-only
+```
+
+There is **no `slot0`/`slot1`**, and `boot_partition` is the UF2 bootloader
+itself — so there is nothing for MCUboot to swap between. Keeping it would mean
+hand-authoring a partition overlay and chain-loading MCUboot at `0x26000`,
+behind Nordic's MBR, leaving roughly **372 KB per slot against 472 KB** and
+reserving 152 KB for a SoftDevice we do not use. Unsupported and unverified.
+
+The backup makes this reversible, which is the point: restore `flash_full.bin`
+and `uicr.bin` and the Adafruit bootloader is back.
+
+### The layout we use
+
+From `nordic/nrf52840_partition.dtsi`, which the plain
+`adafruit_feather_nrf52840/nrf52840` target includes:
+
+| Region | Address | Size |
+|---|---|---|
+| `boot_partition` (MCUboot) | `0x00000` | 48 KB |
+| `slot0_partition` | `0x0c000` | 472 KB |
+| `slot1_partition` | `0x82000` | 472 KB |
+| `storage_partition` | `0xf8000` | 32 KB |
+
+No scratch partition, which suits `SB_CONFIG_MCUBOOT_MODE_SWAP_USING_OFFSET`.
+
+**MCUboot uses 80% of its 48 KB partition** (39,680 bytes as built), against
+63.5 KB on RP2040. `build-feather.sh` warns below 25% headroom, because serial
+recovery is the thing most likely to push it over.
 
 This asymmetry is a real argument for ROM-loader silicon in a product: on
 RP2040 provisioning is a drag-and-drop that cannot brick; on nRF52840 it is a
 probe, a backup, and a lock-out risk.
+
+[devzone-nreset]: https://devzone.nordicsemi.com/f/nordic-q-a/128196/nrf52840-locked-with-approtect-unable-to-recover-flash-without-nreset-pin
 
 ## Recovering a board with nothing bootable
 
