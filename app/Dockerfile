@@ -14,8 +14,14 @@ COPY . /ws/firmware/
 # -Dapp_SNIPPET rather than -S: under sysbuild a top-level snippet applies to
 # EVERY image, which would pull MCUmgr, this module and a dual CDC composite
 # into the bootloader.
+#
+# ZEPHYR_EXTRA_MODULES is not optional: balena-mcu lives *inside* the manifest
+# repo, and west only auto-discovers a module.yml at a project's root. Ours is
+# nested at firmware/balena-mcu/zephyr/module.yml, so without this the module
+# and its snippet are simply not there. Same line both build scripts carry.
 RUN west build -b "${BOARD}" --sysbuild firmware/app \
-      -- -Dapp_SNIPPET=balena-mcu \
+      -- -DZEPHYR_EXTRA_MODULES=/ws/firmware/balena-mcu \
+         -Dapp_SNIPPET=balena-mcu \
          -DSB_CONFIG_BOOTLOADER_MCUBOOT=y \
          -DSB_CONFIG_MCUBOOT_MODE_SWAP_USING_OFFSET=y
 
