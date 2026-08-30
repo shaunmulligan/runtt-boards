@@ -1,0 +1,20 @@
+/*
+ * Feather bring-up: SMP over the debug probe's UART bridge, no USB.
+ *
+ * The board's own DTS already points console, shell and uart-mcumgr at &uart0,
+ * so this only has to undo what the balena-mcu snippet's Feather overlay does
+ * (which moves them onto a dual CDC-ACM composite). Snippet overlays are applied
+ * first, so this one wins.
+ *
+ * The point of bringing up over a dumb wire before USB: it decomposes "the board
+ * came up but nothing works" into two independently debuggable failures. Prove
+ * MCUmgr, the contract and the runtime over a wire that cannot enumerate wrong,
+ * and the only new variable left is the USB layer.
+ */
+/ {
+	chosen {
+		zephyr,uart-mcumgr = &uart0;
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+	};
+};

@@ -243,3 +243,49 @@ addressed.
 ---
 
 *Co-authored with Claude*
+
+## Feather bring-up over the probe's UART bridge
+
+Verified 2026-08-30 on an nRF52840 rev `AAC0`. This stage needs **no MCUboot and
+destroys nothing** — the Adafruit MBR, SoftDevice and UF2 bootloader all survive,
+because the application is linked at `0x26000` where the Adafruit stack expects
+one, rather than at `0x0`.
+
+```bash
+west build -p always -b adafruit_feather_nrf52840/nrf52840 \
+  --snippet balena-mcu firmware/app -d build-feather -- \
+  -DZEPHYR_EXTRA_MODULES="$PWD/firmware/balena-mcu" \
+  -DEXTRA_DTC_OVERLAY_FILE="$PWD/firmware/bringup/feather-uart.overlay" \
+  -DEXTRA_CONF_FILE="$PWD/firmware/bringup/feather-uart.conf"
+
+pyocd flash -t nrf52840 --base-address 0x26000 build-feather/zephyr/zephyr.bin
+pyocd cmd -t nrf52840 -c reset
+```
+
+Then, on the probe's UART bridge:
+
+```
+$ cargo run -p smp-client --example ping -- /dev/ttyACM0
+  echo -> "balena"
+  image list -> no images
+  describe -> board: "adafruit_feather_nrf52840/nrf52840", channels: 1, img: true
+```
+
+`no images` is expected here: the img group is present but nothing is managing
+slots without a bootloader. The point of this stage is that **MCUmgr, the
+contract and the runtime are proven over a wire that cannot enumerate wrong**, so
+when USB is introduced the only new variable is USB.
+
+Note this is also the single-channel configuration: SMP and log output share one
+link, and the runtime demultiplexes them by the console transport's framing
+markers. The app logs every two seconds throughout, and SMP is unaffected.
+
+### Testing the wiring without any firmware
+
+Both SWD and UART can be confirmed before flashing anything, by driving the
+nRF52840's UARTE peripheral straight from the debugger — write a string into RAM,
+point `TXD.PTR` at it, set `PSEL.TXD` to P0.25 and trigger `TASKS_STARTTX`; the
+reverse with `PSEL.RXD`/`TASKS_STARTRX` for the other direction. A reset clears
+it. If RX reads back empty, check `EVENTS_RXDRDY` (`0x40002108`) before blaming
+the wiring — it distinguishes "no signal reached the pin" from "the read raced
+the DMA", which is a mistake worth not repeating.
