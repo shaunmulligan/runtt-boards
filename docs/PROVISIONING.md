@@ -227,6 +227,46 @@ which Zephyr removes in 4.5 and which
 [mcuboot#2596](https://github.com/mcu-tools/mcuboot/issues/2596) has not yet
 addressed.
 
+## Giving a board its identity
+
+Provisioning writes one more thing beyond MCUboot and the idle app: a 32-byte
+identity record carrying the board's CAN node id and serial. It goes at the start
+of `storage_partition`, outside both MCUboot slots, so firmware updates never
+touch it.
+
+This is what lets **one firmware image serve a whole fleet**. Without it a CAN
+node id is a Kconfig symbol, so every board on a bus needs its own build — and
+since firmware ships as an OCI image, its own image in the registry.
+
+```bash
+# Build the record. --can-node-id is only needed for boards on a CAN bus;
+# --serial is useful on any board, as identity beyond a USB port path.
+./scripts/make-identity.py --can-node-id 0x45 --serial arm-01 \
+  -o identity.bin --board adafruit_feather_nrf52840
+
+# Write it. The address is the board's storage_partition, which --board prints.
+pyocd flash -t nrf52840 --base-address 0xf8000 identity.bin
+```
+
+| Board | `storage_partition` |
+|---|---|
+| `adafruit_feather_nrf52840` | `0xf8000` |
+| `rpi_pico` | `0x1b0000` (`0x101b0000` XIP-mapped) |
+| `esp32s3_devkitc` | `0x3b0000` |
+| `native_sim` | `0xfc000` |
+
+Verify it took by asking the board:
+
+```console
+$ cargo run -p smp-client --example ping -- /dev/balena-mcu/<tag>-mgmt
+  describe -> Describe { ..., provisioned: Some(true), serial: Some("arm-01") }
+```
+
+A board with no record uses its built-in defaults, which is the correct factory
+behaviour — that is what keeps an unprovisioned board answering `describe`. A
+board with a *damaged* record refuses to bring up CAN rather than guessing an
+address; see docs/WIRE_CONTRACT.md for why those two cases differ.
+
 ## Signing
 
 > ⚠️ The build default signs with MCUboot's `root-rsa-2048.pem`, which is the
