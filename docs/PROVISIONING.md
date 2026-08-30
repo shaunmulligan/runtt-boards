@@ -87,7 +87,44 @@ and no BOOTSEL to fall back on. Every flash needs SWD, and flashing MCUboot to
 `0x0` destroys the Adafruit UF2 bootloader, the MBR and the bootloader settings
 page.
 
-The flow is three commands, in this order:
+### Wiring
+
+Every flash needs SWD, so this is the first thing to get right. The Feather's
+2×5 0.05″ (1.27 mm) header needs an adapter; these labels are the Adafruit #2743
+breakout, which is signal-labelled rather than numbered:
+
+| Probe wire | Breakout pad | Signal | Cortex-10 pin |
+|---|---|---|---|
+| orange | `CLK` | SWCLK | 4 |
+| yellow | `SWIO` | SWDIO | 2 |
+| black | `GND` (either) | GND | 3 or 5 |
+
+Leave `Vref`, `SWO`, `NC` and `KEY` unconnected — the Raspberry Pi Debug Probe is
+fixed 3.3 V logic and does not sense VTREF. Pin 1 is marked with a ▶ beside
+`Vref`.
+
+Wire colours follow the [3-pin debug connector specification][rpi-debug-spec]:
+connector pin 1 = SC (serial clock) = orange, pin 2 = GND = black, pin 3 = SD
+(bidirectional data) = yellow.
+
+**The probe cannot drive reset.** The D port carries only SC, GND and SD, so
+`pyocd --connect under-reset` is unavailable. Wire the breakout's `!RST` pad out
+if you want a reset you control: momentarily jumper it to GND. It is active low,
+so leaving it grounded holds the part in reset. That is the lever if APPROTECT
+recovery ever needs reset timing controlled — see below.
+
+Prove the wiring before anything destructive. This reads the chip ID and writes
+nothing:
+
+```bash
+pyocd cmd -t nrf52840 -c "read32 0x10000130"   # FICR.INFO.VARIANT
+```
+
+[rpi-debug-spec]: https://datasheets.raspberrypi.com/debug/debug-connector-specification.pdf
+
+### The flow
+
+Three commands, in this order:
 
 ```bash
 ./scripts/backup-nrf52840.sh          # FIRST. Not optional.
