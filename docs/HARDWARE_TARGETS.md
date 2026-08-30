@@ -220,6 +220,7 @@ measured rather than asserted.
 | Does a larger MCUboot slot cost swap time for a small image? | Decides whether to take the 16 M partition tables or a smaller one. Depends on swap mode; we pin `SWAP_USING_OFFSET`. |
 | Firmware upload rate over ISO-TP at 500 kbit/s | Sets whether CAN is viable for delivery or only for control. MCP2515's 1 MHz SPI link is ~125 KB/s, above the CAN line rate, so CAN should dominate — unverified. |
 | Actual USB port path behind the CH334 hub | The annotation string we document for the ESP32-S3 board. |
+| Whether the raw-frame log channel keeps up on a real 500 kbit/s bus | It works on `vcan0`, which has no bit rate. Frames are dropped rather than queued when the controller is busy, so the drop rate under real timing is unknown. |
 | Does `CAN_ESP32_TWAI` work on S3 in practice? | Driver and DT exist; nobody upstream reports a Zephyr SMP-over-CAN run on it. |
 
 ---
