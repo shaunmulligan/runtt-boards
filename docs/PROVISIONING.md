@@ -289,3 +289,54 @@ reverse with `PSEL.RXD`/`TASKS_STARTRX` for the other direction. A reset clears
 it. If RX reads back empty, check `EVENTS_RXDRDY` (`0x40002108`) before blaming
 the wiring — it distinguishes "no signal reached the pin" from "the read raced
 the DMA", which is a mistake worth not repeating.
+
+## Feather: full provisioning with MCUboot
+
+Verified 2026-08-30, end to end: `docker run` deploys firmware to an Adafruit
+Feather nRF52840 and MCUboot swaps and confirms it.
+
+**This is the destructive step.** It overwrites the Nordic MBR, the SoftDevice
+and the Adafruit UF2 bootloader -- `slot1_partition` spans `0xf4000`, where the
+bootloader lives. Afterwards the only recovery path is SWD. Take the backup
+first (`pyocd cmd -t nrf52840 -c "savemem 0x0 0x100000 flash_full.bin"` plus
+UICR at `0x10001000`), and check the sha256.
+
+```bash
+west build -p always -b adafruit_feather_nrf52840/nrf52840 --sysbuild firmware/app \
+  -d build-feather -- -DZEPHYR_EXTRA_MODULES="$PWD/firmware/balena-mcu" \
+  -Dapp_SNIPPET=balena-mcu
+
+# A confirmed image for the PRIMARY slot: --pad --confirm, and no --pad-header
+# (the app already reserves its header via CONFIG_ROM_START_OFFSET).
+python3 bootloader/mcuboot/scripts/imgtool.py sign \
+  --key bootloader/mcuboot/root-rsa-2048.pem \
+  --header-size 0x200 --align 4 --version 0.1.0 \
+  --slot-size 0x76000 --pad --confirm \
+  build-feather/app/zephyr/zephyr.bin slot0.bin
+
+pyocd flash -t nrf52840 --base-address 0x0     build-feather/mcuboot/zephyr/zephyr.bin
+pyocd flash -t nrf52840 --base-address 0xc000  slot0.bin
+pyocd cmd -t nrf52840 -c reset
+```
+
+Layout is Nordic's standard `nrf52840_partition.dtsi`: MCUboot `0x0..0xc000`
+(39 KB of 48 KB used, 81% -- tight), slot0 `0xc000..0x82000`, slot1
+`0x82000..0xf8000`.
+
+### The one board-specific defect worth knowing
+
+Zephyr's default `UDC_NRF_THREAD_STACK_SIZE` is 512 bytes, and that is not
+enough for two CDC-ACM instances. The driver thread overflows the first time USB
+suspend is handled, and it presents as an MPU **Instruction Access Violation**
+jumping into a data symbol, with `xpsr` showing the Thumb bit clear -- a call
+through a pointer holding a data address. It fires immediately after
+`udc_nrf: SUSPEND state detected`, and the board simply never enumerates.
+
+`CONFIG_UDC_NRF_THREAD_STACK_SIZE=2048` in the board conf fixes it. Isolated by
+bisection on hardware: that line alone, nothing else.
+
+Debugging tip that made this findable: build with the console on `uart0` rather
+than the USB log channel while bringing USB up. A console on a channel that
+never enumerates has nowhere to print the fatal error explaining why -- the
+board just looks silently dead. `firmware/bringup/feather-usb-uartconsole.overlay`
+does exactly that.

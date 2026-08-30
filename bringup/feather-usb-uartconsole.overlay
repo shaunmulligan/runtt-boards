@@ -1,0 +1,14 @@
+/*
+ * Debugging aid: the full USB configuration, but with the console left on the
+ * probe's UART bridge instead of the USB log channel.
+ *
+ * Worth keeping. If USB fails to come up, a console on the USB log channel has
+ * nowhere to print -- including the fatal error explaining why -- so the board
+ * looks silently dead. Putting the console on the wire makes the panic readable.
+ */
+/ {
+	chosen {
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+	};
+};
