@@ -72,7 +72,7 @@ def main() -> int:
     zbase = pathlib.Path(args.zephyr_base)
 
     # Sysbuild names the application image after its directory, so do not
-    # hardcode "app" -- the provisioning payload is balena-mcu-idle.
+    # hardcode "app" -- the provisioning payload is runtt-idle.
     image = args.image
     if image is None:
         candidates = sorted(

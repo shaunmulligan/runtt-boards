@@ -3,7 +3,7 @@
 #
 # Two configurations, because they prove different things:
 #
-#   provision  balena-mcu-idle under sysbuild, emitted as a single UF2. This is
+#   provision  runtt-idle under sysbuild, emitted as a single UF2. This is
              what a customer flashes over BOOTSEL to make a board manageable.
              See docs/PROVISIONING.md.
 
@@ -33,8 +33,8 @@ unset ZEPHYR_TOOLCHAIN_VARIANT
 
 build_bringup() {
   echo "=== bringup: plain rpi_pico (no bootloader, no image management) ==="
-  west build -p always -b rpi_pico --snippet balena-mcu firmware/app \
-    -d build-pico -- -DZEPHYR_EXTRA_MODULES="$REPO/firmware/balena-mcu"
+  west build -p always -b rpi_pico --snippet runtt firmware/app \
+    -d build-pico -- -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt"
   echo
   echo "  flash by drag-and-drop: hold BOOTSEL, plug in, then"
   echo "    cp build-pico/zephyr/zephyr.uf2 /media/\$USER/RPI-RP2/"
@@ -47,8 +47,8 @@ build_mcuboot() {
   # composite inside the bootloader.
   west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild firmware/app \
     -d build-pico-mcuboot -- \
-    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/balena-mcu" \
-    -Dapp_SNIPPET=balena-mcu
+    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt" \
+    -Dapp_SNIPPET=runtt
 
   local boot_bin=build-pico-mcuboot/mcuboot/zephyr/zephyr.bin
   local signed=build-pico-mcuboot/app/zephyr/zephyr.signed.bin
@@ -93,11 +93,11 @@ warn_dev_key() {
 }
 
 build_provision() {
-  echo "=== provision: balena-mcu-idle + MCUboot, one flashable image ==="
+  echo "=== provision: runtt-idle + MCUboot, one flashable image ==="
   west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild firmware/idle \
     -d build-pico-idle -- \
-    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/balena-mcu" \
-    -Didle_SNIPPET=balena-mcu
+    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt" \
+    -Didle_SNIPPET=runtt
   echo
   python3 scripts/make-provision-uf2.py \
     --build-dir build-pico-idle \

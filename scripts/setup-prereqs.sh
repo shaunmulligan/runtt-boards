@@ -26,8 +26,8 @@ cd "$REPO"
 PROBE_VID_PID="2e8a:000c"
 PROBE_FW_VERSION="debugprobe-v2.3.1"
 PROBE_FW_URL="https://github.com/raspberrypi/debugprobe/releases/download/${PROBE_FW_VERSION}/debugprobe.uf2"
-UDEV_RULES="udev/90-balena-mcu.rules"
-UDEV_DEST="/etc/udev/rules.d/90-balena-mcu.rules"
+UDEV_RULES="udev/90-runtt.rules"
+UDEV_DEST="/etc/udev/rules.d/90-runtt.rules"
 APT_PACKAGES=(pkg-config libudev-dev python3-pip python3-venv)
 
 CHECK_ONLY=0

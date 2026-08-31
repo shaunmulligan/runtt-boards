@@ -62,11 +62,11 @@ echo
 echo "=== flashed. What should happen now ==="
 echo "  MCUboot boots, finds a confirmed image in slot 0, and runs it."
 echo "  The board should enumerate two USB interfaces:"
-echo "    balena-mcu-mgmt   SMP management"
-echo "    balena-mcu-log    application log output"
+echo "    runtt-mgmt   SMP management"
+echo "    runtt-log    application log output"
 echo
 echo "  Check it answers the contract:"
-echo "    ls /dev/balena-mcu/"
-echo "    cargo run -p smp-client --example ping -- /dev/balena-mcu/*-mgmt"
+echo "    ls /dev/runtt/"
+echo "    cargo run -p runtt-smp --example ping -- /dev/runtt/*-mgmt"
 echo
 echo "  Expect echo -> \"balena\" and a describe line naming the board."

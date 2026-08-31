@@ -2,7 +2,7 @@
  * Copyright (c) 2026 The runtt authors
  * SPDX-License-Identifier: MIT OR Apache-2.0
  *
- * balena-mcu-idle: the application that ships in slot 0 at provisioning time.
+ * runtt-idle: the application that ships in slot 0 at provisioning time.
  *
  * It does nothing, on purpose. What matters is what it makes possible: a board
  * carrying it enumerates, answers `describe`, and accepts an image upload.
@@ -15,7 +15,7 @@
  * a clear error, which is the difference between a five-minute diagnosis and an
  * afternoon.
  *
- * Everything that makes it manageable comes from the balena-mcu module. There is
+ * Everything that makes it manageable comes from the runtt module. There is
  * deliberately nothing here.
  */
 #include <zephyr/kernel.h>
@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(idle, LOG_LEVEL_INF);
 
 int main(void)
 {
-	LOG_INF("balena-mcu-idle on %s: provisioned, awaiting first firmware",
+	LOG_INF("runtt-idle on %s: provisioned, awaiting first firmware",
 		CONFIG_BOARD_TARGET);
 
 	/* Sleep forever. The SMP server runs on its own thread, so the runtime

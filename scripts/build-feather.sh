@@ -9,7 +9,7 @@
 #   mcuboot    the same board under sysbuild with MCUboot: the full contract,
 #              and the configuration a firmware container actually ships.
 #
-#   provision  balena-mcu-idle plus MCUboot, emitted as two hex files ready to
+#   provision  runtt-idle plus MCUboot, emitted as two hex files ready to
 #              flash over SWD. This is the one physical act; everything after it
 #              is remote. See docs/PROVISIONING.md.
 #
@@ -74,8 +74,8 @@ build_bringup() {
   echo "=== bringup: plain $BOARD (no bootloader, no image management) ==="
   # Plain -S here, not -Dapp_SNIPPET: this is a NON-sysbuild build, so there is
   # no bootloader image for a top-level snippet to leak into.
-  west build -p always -b "$BOARD" --snippet balena-mcu firmware/examples/app1 \
-    -d build-feather-bringup -- -DZEPHYR_EXTRA_MODULES="$REPO/firmware/balena-mcu"
+  west build -p always -b "$BOARD" --snippet runtt firmware/examples/app1 \
+    -d build-feather-bringup -- -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt"
   echo
   echo "  flash it over SWD (no BOOTSEL on this board):"
   echo "    pyocd flash -t nrf52840 build-feather-bringup/zephyr/zephyr.hex"
@@ -88,8 +88,8 @@ build_mcuboot() {
   # composite into the bootloader -- and into 48 KB, it would not fit.
   west build -p always -b "$BOARD" --sysbuild firmware/examples/app1 \
     -d build-feather -- \
-    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/balena-mcu" \
-    -Dapp1_SNIPPET=balena-mcu
+    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt" \
+    -Dapp1_SNIPPET=runtt
   echo
   check_boot_fits build-feather
   local signed=build-feather/app1/zephyr/zephyr.signed.bin
@@ -117,11 +117,11 @@ PY
 }
 
 build_provision() {
-  echo "=== provision: balena-mcu-idle + MCUboot, for SWD ==="
+  echo "=== provision: runtt-idle + MCUboot, for SWD ==="
   west build -p always -b "$BOARD" --sysbuild firmware/idle \
     -d build-feather-idle -- \
-    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/balena-mcu" \
-    -Didle_SNIPPET=balena-mcu
+    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt" \
+    -Didle_SNIPPET=runtt
   echo
   check_boot_fits build-feather-idle
 

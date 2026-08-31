@@ -70,4 +70,4 @@ echo "board rebooted — flash accepted"
 echo
 echo "check what came up:"
 echo "  lsusb | grep 2fe3"
-echo "  ls /dev/balena-mcu/"
+echo "  ls /dev/runtt/"

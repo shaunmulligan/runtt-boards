@@ -101,13 +101,13 @@ transceiver, which is exactly the half the Waveshare SN65HVD230 board supplies.
 **CH334 hub**, which fans out to a **CH343** USB-UART bridge *and* the S3's native
 USB. One cable, two independent devices. Consequences:
 
-- **The port path gets deeper.** Our annotation is `io.balena.mcu.target=usb:3-4`;
+- **The port path gets deeper.** Our annotation is `dev.runtt.target=usb:3-4`;
   behind the hub the native USB lands at something like `3-4.1`. `resolve()` reads
   the port path from `DEVPATH` generically so it handles this, but the string you
   write in the annotation is not the one you would write for a hub-less board.
   Arguably a *better* test than a clean board — real robots put MCUs behind hubs.
 - **Three CDC devices on one cable**, not two: the CH343's, plus our firmware's
-  `balena-mcu-mgmt` and `balena-mcu-log`. Our udev rules key on interface **string
+  `runtt-mgmt` and `runtt-log`. Our udev rules key on interface **string
   descriptors** rather than interface numbers, so this exercises that matching
   harder than a clean board would.
 - The hub is entirely on the host side of the connector. The S3's USB device stack

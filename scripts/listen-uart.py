@@ -4,7 +4,7 @@
 For reading a target's console through the Debug Probe's UART bridge, which is
 how you find out what a bootloader is doing when it has no USB of its own.
 
-    ./scripts/listen-uart.py /dev/balena-mcu/probe-uart --seconds 20
+    ./scripts/listen-uart.py /dev/runtt/probe-uart --seconds 20
 """
 import argparse
 import sys

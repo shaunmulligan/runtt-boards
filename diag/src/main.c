@@ -46,7 +46,7 @@ static void dump(const char *label, uint32_t addr, size_t len)
 
 int main(void)
 {
-	printk("\n=== balena-mcu flash inspector ===\n");
+	printk("\n=== runtt flash inspector ===\n");
 
 	for (size_t i = 0; i < ARRAY_SIZE(regions); i++) {
 		const struct region *r = &regions[i];

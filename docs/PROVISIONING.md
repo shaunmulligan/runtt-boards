@@ -26,8 +26,8 @@ Verify:
 
 ```bash
 lsusb | grep 2fe3                        # the board, as a USB device
-ls /dev/balena-mcu/                       # -mgmt and -log, via the udev rules
-cargo run -p smp-client --example ping -- /dev/balena-mcu/*-mgmt
+ls /dev/runtt/                       # -mgmt and -log, via the udev rules
+cargo run -p runtt-smp --example ping -- /dev/runtt/*-mgmt
 ```
 
 A provisioned board answers `describe` with its board target, contract version
@@ -62,7 +62,7 @@ has no USB of its own — does so **completely silently**. No enumeration, no
 device node, nothing. A board in that state is indistinguishable from one that is
 unplugged or dead.
 
-`balena-mcu-idle` (`firmware/idle/`) is that application: the module plus a
+`runtt-idle` (`firmware/idle/`) is that application: the module plus a
 no-op main. It reports `idle: true` over `describe`, so the runtime can say
 
     device is rpi_pico/rp2040/mcuboot freshly provisioned, awaiting its first firmware
@@ -258,7 +258,7 @@ pyocd flash -t nrf52840 --base-address 0xf8000 identity.bin
 Verify it took by asking the board:
 
 ```console
-$ cargo run -p smp-client --example ping -- /dev/balena-mcu/<tag>-mgmt
+$ cargo run -p runtt-smp --example ping -- /dev/runtt/<tag>-mgmt
   describe -> Describe { ..., provisioned: Some(true), serial: Some("arm-01") }
 ```
 
@@ -293,8 +293,8 @@ one, rather than at `0x0`.
 
 ```bash
 west build -p always -b adafruit_feather_nrf52840/nrf52840 \
-  --snippet balena-mcu firmware/app -d build-feather -- \
-  -DZEPHYR_EXTRA_MODULES="$PWD/firmware/balena-mcu" \
+  --snippet runtt firmware/app -d build-feather -- \
+  -DZEPHYR_EXTRA_MODULES="$PWD/firmware/runtt" \
   -DEXTRA_DTC_OVERLAY_FILE="$PWD/firmware/bringup/feather-uart.overlay" \
   -DEXTRA_CONF_FILE="$PWD/firmware/bringup/feather-uart.conf"
 
@@ -305,8 +305,8 @@ pyocd cmd -t nrf52840 -c reset
 Then, on the probe's UART bridge:
 
 ```
-$ cargo run -p smp-client --example ping -- /dev/ttyACM0
-  echo -> "balena"
+$ cargo run -p runtt-smp --example ping -- /dev/ttyACM0
+  echo -> "runtt"
   image list -> no images
   describe -> board: "adafruit_feather_nrf52840/nrf52840", channels: 1, img: true
 ```
@@ -343,8 +343,8 @@ UICR at `0x10001000`), and check the sha256.
 
 ```bash
 west build -p always -b adafruit_feather_nrf52840/nrf52840 --sysbuild firmware/app \
-  -d build-feather -- -DZEPHYR_EXTRA_MODULES="$PWD/firmware/balena-mcu" \
-  -Dapp_SNIPPET=balena-mcu
+  -d build-feather -- -DZEPHYR_EXTRA_MODULES="$PWD/firmware/runtt" \
+  -Dapp_SNIPPET=runtt
 
 # A confirmed image for the PRIMARY slot: --pad --confirm, and no --pad-header
 # (the app already reserves its header via CONFIG_ROM_START_OFFSET).

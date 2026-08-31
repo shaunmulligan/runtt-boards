@@ -2,7 +2,7 @@
  * Feather bring-up: SMP over the debug probe's UART bridge, no USB.
  *
  * The board's own DTS already points console, shell and uart-mcumgr at &uart0,
- * so this only has to undo what the balena-mcu snippet's Feather overlay does
+ * so this only has to undo what the runtt snippet's Feather overlay does
  * (which moves them onto a dual CDC-ACM composite). Snippet overlays are applied
  * first, so this one wins.
  *
