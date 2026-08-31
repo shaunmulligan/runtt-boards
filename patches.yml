@@ -12,7 +12,7 @@ patches:
   - path: mcuboot/0001-bound-find_last_idx-loops.patch
     sha256sum: 3e005fb30293d87acd2e3e5ccb0d8db4602159cbcb3167201eed8fa5a12d40c0
     module: mcuboot
-    author: balena
+    author: Shaun Mulligan
     email: shaun.mulligan@balena.io
     date: 2026-08-29
     upstreamable: true
