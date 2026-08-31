@@ -69,4 +69,4 @@ echo "  Check it answers the contract:"
 echo "    ls /dev/runtt/"
 echo "    cargo run -p runtt-smp --example ping -- /dev/runtt/*-mgmt"
 echo
-echo "  Expect echo -> \"balena\" and a describe line naming the board."
+echo "  Expect echo -> \"runtt\" and a describe line naming the board."
