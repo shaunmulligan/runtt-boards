@@ -1,4 +1,4 @@
-# West manifest for the balena MCU firmware side.
+# West manifest for the runtt firmware side.
 #
 # Zephyr is pinned to an exact tag, never a branch. Minor releases have already
 # moved behaviour under this project twice: the flash simulator's

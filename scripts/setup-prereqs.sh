@@ -103,7 +103,7 @@ fi
 # ============================================================================
 # Report
 # ============================================================================
-echo "${B}balena MCU runtime — host prerequisites${N}"
+echo "${B}runtt runtime — host prerequisites${N}"
 
 head2 "1. Build dependencies (needs sudo)"
 if [[ ${#NEED_APT[@]} -eq 0 ]]; then
