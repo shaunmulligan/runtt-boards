@@ -28,6 +28,6 @@ export ZEPHYR_TOOLCHAIN_VARIANT=host
 # clobbering a single build/ between them makes the two gates fight.
 BUILD_DIR="${BUILD_DIR:-$REPO/build}"
 
-west build -p always -b native_sim/native/64 --snippet runtt app \
+west build -p always -b native_sim/native/64 --snippet runtt app-test \
   -d "$BUILD_DIR" \
   -- "$@"

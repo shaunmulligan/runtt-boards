@@ -344,7 +344,7 @@ UICR at `0x10001000`), and check the sha256.
 ```bash
 west build -p always -b adafruit_feather_nrf52840/nrf52840 --sysbuild firmware/app \
   -d build-feather -- -DZEPHYR_EXTRA_MODULES="$PWD/firmware/runtt" \
-  -Dapp_SNIPPET=runtt
+  -Dapp-test_SNIPPET=runtt
 
 # A confirmed image for the PRIMARY slot: --pad --confirm, and no --pad-header
 # (the app already reserves its header via CONFIG_ROM_START_OFFSET).
@@ -352,7 +352,7 @@ python3 bootloader/mcuboot/scripts/imgtool.py sign \
   --key bootloader/mcuboot/root-rsa-2048.pem \
   --header-size 0x200 --align 4 --version 0.1.0 \
   --slot-size 0x76000 --pad --confirm \
-  build-feather/app/zephyr/zephyr.bin slot0.bin
+  build-feather/app-test/zephyr/zephyr.bin slot0.bin
 
 pyocd flash -t nrf52840 --base-address 0x0     build-feather/mcuboot/zephyr/zephyr.bin
 pyocd flash -t nrf52840 --base-address 0xc000  slot0.bin

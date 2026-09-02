@@ -80,9 +80,9 @@ check_boot_fits() {
 
 build_bringup() {
   echo "=== bringup: plain $BOARD (no bootloader, no image management) ==="
-  # Plain -S here, not -Dapp_SNIPPET: this is a NON-sysbuild build, so there is
+  # Plain -S here, not -Dapp-test_SNIPPET: this is a NON-sysbuild build, so there is
   # no bootloader image for a top-level snippet to leak into.
-  west build -p always -b "$BOARD" --snippet runtt app \
+  west build -p always -b "$BOARD" --snippet runtt app-test \
     -d build-feather-bringup
   echo
   echo "  flash it over SWD (no BOOTSEL on this board):"
@@ -94,7 +94,7 @@ build_mcuboot() {
   # -Dapp1_SNIPPET rather than --snippet: under sysbuild a top-level snippet
   # applies to EVERY image, which would pull MCUmgr, our module and a dual CDC
   # composite into the bootloader -- and into 48 KB, it would not fit.
-  west build -p always -b "$BOARD" --sysbuild app \
+  west build -p always -b "$BOARD" --sysbuild app-test \
     -d build-feather -- \
        -Dapp1_SNIPPET=runtt
   echo

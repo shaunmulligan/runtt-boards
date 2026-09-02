@@ -41,7 +41,7 @@ unset ZEPHYR_TOOLCHAIN_VARIANT
 
 build_bringup() {
   echo "=== bringup: plain rpi_pico (no bootloader, no image management) ==="
-  west build -p always -b rpi_pico --snippet runtt app \
+  west build -p always -b rpi_pico --snippet runtt app-test \
     -d build-pico
   echo
   echo "  flash by drag-and-drop: hold BOOTSEL, plug in, then"
@@ -50,15 +50,15 @@ build_bringup() {
 
 build_mcuboot() {
   echo "=== mcuboot: rpi_pico/rp2040/mcuboot under sysbuild (full contract) ==="
-  # -Dapp_SNIPPET rather than --snippet. With sysbuild, --snippet applies the
+  # -Dapp-test_SNIPPET rather than --snippet. With sysbuild, --snippet applies the
   # snippet to EVERY image, which would enable MCUmgr, our module and a dual CDC
   # composite inside the bootloader.
-  west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild app \
+  west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild app-test \
     -d build-pico-mcuboot -- \
-       -Dapp_SNIPPET=runtt
+       -Dapp-test_SNIPPET=runtt
 
   local boot_bin=build-pico-mcuboot/mcuboot/zephyr/zephyr.bin
-  local signed=build-pico-mcuboot/app/zephyr/zephyr.signed.bin
+  local signed=build-pico-mcuboot/app-test/zephyr/zephyr.signed.bin
   local slot=$((0xfe00))
 
   echo
