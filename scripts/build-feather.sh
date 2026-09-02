@@ -91,16 +91,23 @@ build_bringup() {
 
 build_mcuboot() {
   echo "=== mcuboot: $BOARD under sysbuild (full contract) ==="
-  # -Dapp1_SNIPPET rather than --snippet: under sysbuild a top-level snippet
+  # -Dapp-test_SNIPPET rather than --snippet: under sysbuild a top-level snippet
   # applies to EVERY image, which would pull MCUmgr, our module and a dual CDC
   # composite into the bootloader -- and into 48 KB, it would not fit.
+  #
+  # The image name comes from the SOURCE DIRECTORY. It said app1 here long after
+  # the directory stopped being called that, and sysbuild ignores a snippet flag
+  # naming an image that does not exist -- silently, with a zero exit. The build
+  # succeeded and produced firmware with no SMP server, no USB contract and no
+  # runtt module in it at all. Keep this in step with the directory.
   west build -p always -b "$BOARD" --sysbuild app-test \
     -d build-feather -- \
-       -Dapp1_SNIPPET=runtt
+       -Dapp-test_SNIPPET=runtt
   echo
   check_boot_fits build-feather
-  local signed=build-feather/app1/zephyr/zephyr.signed.bin
-  [[ -f "$signed" ]] && echo "  signed image: $(stat -c %s "$signed") bytes  ($signed)"
+  local signed=build-feather/app-test/zephyr/zephyr.signed.bin
+  [[ -f "$signed" ]] || die "no signed image at $signed -- did the sysbuild image name change?"
+  echo "  signed image: $(stat -c %s "$signed") bytes  ($signed)"
   verify_image "$signed"
   warn_dev_key build-feather
 }
@@ -109,7 +116,9 @@ build_mcuboot() {
 # than only when something has already gone wrong. A double-padded header passes
 # `imgtool verify` and then locks the board up; here it costs nothing to catch.
 verify_image() {
-  [[ -f "$1" ]] || return 0
+  # Not `|| return 0`. Returning success for a file that is not there is how a
+  # renamed sysbuild image went unnoticed: the check passed by not running.
+  [[ -f "$1" ]] || die "verify_image: $1 does not exist"
   python3 - "$1" <<'PY'
 import struct, pathlib, sys
 d = pathlib.Path(sys.argv[1]).read_bytes()
