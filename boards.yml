@@ -1,0 +1,77 @@
+# Every board runtt supports, and everything CI needs to know about each one.
+#
+# THIS FILE IS THE SOURCE OF TRUTH. The CI build list, the release notes table
+# and the README's download table are all generated from it by scripts/boards.py,
+# and `scripts/boards.py --check-readme` fails the build if the README has drifted.
+#
+# Before this existed the per-board asset list was written out three times, and
+# three copies of a list that grows to dozens of boards will disagree eventually
+# -- silently, as a board that builds but never gets published, or a README link
+# to an asset that does not exist.
+#
+# ADDING A BOARD: append an entry, run `scripts/boards.py --write-readme`, and
+# see docs/PORTING.md for the work that comes before that.
+#
+# Fields
+#   id           Zephyr board target passed to `west build -b`. Must be one with
+#                MCUboot slots -- see docs/PORTING.md.
+#   name         What a human calls it, for tables.
+#   soc          For grouping and for the hardware docs.
+#   status       supported | in-progress. Only `supported` is built and published.
+#   build        script + mode that produces the provisioning image.
+#   provision    artefacts: source path in the build tree -> published asset name.
+#   flash        how a user gets it onto the board.
+#   probe        whether a debug probe is required.
+#   notes        anything a user must know BEFORE flashing. Appears in the tables.
+
+boards:
+  - id: rpi_pico/rp2040/mcuboot
+    name: Raspberry Pi Pico
+    soc: RP2040
+    status: supported
+    build:
+      script: scripts/build-pico.sh
+      mode: provision
+    provision:
+      - from: build-pico-idle/provision.uf2
+        as: provision-rpi_pico.uf2
+    flash: Hold BOOTSEL, plug in, copy the file onto the drive that appears
+    probe: false
+    notes: Unbrickable — the RP2040 mask ROM always gives you BOOTSEL back
+
+  - id: adafruit_feather_nrf52840/nrf52840
+    name: Adafruit Feather nRF52840
+    soc: nRF52840
+    status: supported
+    build:
+      script: scripts/build-feather.sh
+      mode: provision
+    provision:
+      - from: build-feather-idle/mcuboot/zephyr/zephyr.hex
+        as: provision-adafruit_feather_nrf52840-mcuboot.hex
+      - from: build-feather-idle/provision-slot0.hex
+        as: provision-adafruit_feather_nrf52840-slot0.hex
+    flash: SWD, both files in order without resetting in between
+    probe: true
+    notes: >-
+      Back the board up first — this erases the Adafruit UF2 bootloader and its
+      UICR settings, and there is no ROM loader to fall back on
+
+  # Boards being brought up. Not built, not published, listed so the intent is
+  # visible and nobody duplicates the work. Promote to `supported` once the
+  # provisioning image has been flashed to real hardware and a deploy confirmed.
+  - id: esp32s3_devkitc/esp32s3/procpu
+    name: Waveshare ESP32-S3 (DevKitC-compatible)
+    soc: ESP32-S3
+    status: in-progress
+    notes: >-
+      Hardware on order. Needs the module dtsi swapped for the N16R8 variant and
+      a partition table chosen — see docs/HARDWARE_TARGETS.md
+
+  - id: feather_canbus_rp2040
+    name: Adafruit RP2040 CAN Bus Feather
+    soc: RP2040 + MCP25625
+    status: in-progress
+    notes: >-
+      Hardware on order. Zephyr has the board and `zephyr,canbus` is already
+      chosen, but it ships no MCUboot slots, so a partition variant needs writing

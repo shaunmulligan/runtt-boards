@@ -108,13 +108,15 @@ jobs:
         working-directory: boards
         run: ./scripts/build-feather.sh mcuboot
 
-      - name: Provisioning image, Pico
+      # Driven by boards.yml, so adding a board does not mean editing this file.
+      - name: Provisioning images, every supported board
         working-directory: boards
-        run: ./scripts/build-pico.sh provision
-
-      - name: Provisioning image, Feather
-        working-directory: boards
-        run: ./scripts/build-feather.sh provision
+        run: |
+          set -euo pipefail
+          ./scripts/boards.py --build-plan | while read -r script mode; do
+            echo "=== $script $mode ==="
+            "./$script" "$mode"
+          done
 
       - name: Collect artefacts
         working-directory: boards
@@ -160,6 +162,21 @@ jobs:
           path: boards/fixtures/
           retention-days: 14
 
+  # boards.yml is the source of truth; this is what makes that true rather than
+  # aspirational. A generator you have to remember to run is just a third copy.
+  manifest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --quiet pyyaml
+      - name: boards.yml is valid and the README matches it
+        run: |
+          ./scripts/boards.py --build-plan
+          ./scripts/boards.py --check-readme
+
   shellcheck:
     runs-on: ubuntu-24.04
     steps:
@@ -170,7 +187,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [firmware, shellcheck]
+    needs: [firmware, shellcheck, manifest]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

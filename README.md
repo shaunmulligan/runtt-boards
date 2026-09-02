@@ -15,20 +15,23 @@ Flash one of these **once per board**. After that every update is remote: the
 board becomes a container image you deploy with
 [runtt](https://github.com/shaunmulligan/runtt).
 
+<!-- BEGIN GENERATED: supported devices (scripts/boards.py) -->
+
 | Board | Download | Probe needed? | How |
 |---|---|---|---|
-| **Raspberry Pi Pico** (RP2040) | [`provision-rpi_pico.uf2`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-rpi_pico.uf2) | **No** | Hold BOOTSEL, plug in, copy the file onto the drive that appears |
-| **Adafruit Feather nRF52840** | [`…-mcuboot.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-mcuboot.hex) + [`…-slot0.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-slot0.hex) | Yes, SWD | [`docs/PROVISIONING.md`](docs/PROVISIONING.md) — **back the board up first**, this erases the Adafruit bootloader |
+| **Raspberry Pi Pico** (RP2040) | [`provision-rpi_pico.uf2`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-rpi_pico.uf2) | **No** | Hold BOOTSEL, plug in, copy the file onto the drive that appears. Unbrickable — the RP2040 mask ROM always gives you BOOTSEL back |
+| **Adafruit Feather nRF52840** (nRF52840) | [`provision-adafruit_feather_nrf52840-mcuboot.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-mcuboot.hex) + [`provision-adafruit_feather_nrf52840-slot0.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-slot0.hex) | Yes, SWD | SWD, both files in order without resetting in between. **Back the board up first — this erases the Adafruit UF2 bootloader and its UICR settings, and there is no ROM loader to fall back on**  |
 
-Check what you downloaded against [`SHA256SUMS`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/SHA256SUMS). Those links
-always resolve to the newest release; [older
-releases](https://github.com/shaunmulligan/runtt-boards/releases) stay available.
+Check what you downloaded against [`SHA256SUMS`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/SHA256SUMS). Those
+links always resolve to the newest release; [older releases](https://github.com/shaunmulligan/runtt-boards/releases) stay
+available.
 
-> Every release asset is an individual file with its own URL, so you download the
-> one image for your board and nothing else. The zipped
-> `ci-provisioning-images.zip` on a workflow run page is **not** this — GitHub
-> zips all build artefacts and cannot serve one file out of them. Use the links
-> above.
+**Being brought up**, not yet published:
+
+* **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen — see docs/HARDWARE_TARGETS.md
+* **Adafruit RP2040 CAN Bus Feather** (RP2040 + MCP25625) — Hardware on order. Zephyr has the board and `zephyr,canbus` is already chosen, but it ships no MCUboot slots, so a partition variant needs writing
+
+<!-- END GENERATED -->
 
 ⚠️ **These images are signed with MCUboot's published development key**, so no
 trust root is enrolled and an image signature proves nothing. That is fine on a
@@ -36,11 +39,13 @@ bench and unfit for a fleet — generate your own key first, and note that on th
 Feather the public half is baked into MCUboot, so rotating it means another SWD
 flash.
 
-### Boards not on this list
+### Adding a board
 
-[`docs/HARDWARE_TARGETS.md`](docs/HARDWARE_TARGETS.md) covers what is coming, what
-each board still needs, and the boards deliberately rejected with the reasons.
-Read it before buying anything.
+Boards are declared in [`boards.yml`](boards.yml), which drives the table above,
+the CI build list and the release assets. [`docs/PORTING.md`](docs/PORTING.md) is
+the walkthrough; [`docs/HARDWARE_TARGETS.md`](docs/HARDWARE_TARGETS.md) covers
+what each candidate still needs, and the boards deliberately rejected with the
+reasons.
 
 ## What is here
 
