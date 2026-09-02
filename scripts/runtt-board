@@ -37,10 +37,18 @@ import subprocess
 import sys
 import tempfile
 
+import json
 import urllib.error
 import urllib.request
 
-import yaml
+# Optional, and that is the point: this script is meant to work as a single
+# downloaded file, and `pip install pyyaml` is a wall in front of somebody who
+# just wants to flash a board. boards.json is generated from boards.yml in CI and
+# read with the stdlib. YAML is only needed to read a west.yml from a checkout.
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 IDENTITY_RECORD_LEN = 32
@@ -106,20 +114,31 @@ def topdir(quiet=False):
     return pathlib.Path(out.stdout.strip())
 
 
-def manifest_path(ref="main"):
-    """boards.yml, from beside this script or from the repository.
-
-    Beside first, so a checkout is authoritative over the network; that matters
-    when someone is adding a board and their entry is not pushed yet."""
-    for cand in (REPO / "boards.yml", pathlib.Path(__file__).resolve().parent / "boards.yml"):
-        if cand.is_file():
-            return cand
-    return fetch(f"{RAW}/{ref}/boards.yml", CACHE / ref / "boards.yml", f"boards.yml ({ref})")
-
-
 def boards(ref="main"):
-    with manifest_path(ref).open() as f:
-        return yaml.safe_load(f)["boards"]
+    """Every board, from the nearest manifest.
+
+    JSON is preferred over YAML at every step, not as an optimisation but because
+    the stdlib can read it: a downloaded copy of this script must work without
+    pip installing anything. A checkout beats the network, which matters when
+    somebody is adding a board and their entry is not pushed yet.
+    """
+    here = pathlib.Path(__file__).resolve().parent
+    for cand in (REPO / "boards.json", here / "boards.json"):
+        if cand.is_file():
+            with cand.open() as f:
+                return json.load(f)["boards"]
+    for cand in (REPO / "boards.yml", here / "boards.yml"):
+        if cand.is_file():
+            if yaml is None:
+                die(f"found {cand.name} but no YAML parser.\n"
+                    "  Either generate the JSON form -- scripts/boards.py --write-json --\n"
+                    "  or `pip install pyyaml`.")
+            with cand.open() as f:
+                return yaml.safe_load(f)["boards"]
+    got = fetch(f"{RAW}/{ref}/boards.json", CACHE / ref / "boards.json",
+                f"boards.json ({ref})")
+    with got.open() as f:
+        return json.load(f)["boards"]
 
 
 def find(name, ref="main"):
@@ -160,11 +179,14 @@ def identity_writer(ref="main"):
 
     module_ref = "main"
     wy = REPO / "west.yml"
-    if wy.is_file():
+    if wy.is_file() and yaml is not None:
         with wy.open() as f:
             for proj in yaml.safe_load(f)["manifest"]["projects"]:
                 if proj.get("name") == "runtt-zephyr-module":
                     module_ref = proj.get("revision", "main")
+    elif wy.is_file():
+        print("  note: no YAML parser, so west.yml's module revision cannot be read;"
+              " using main")
     url = ("https://raw.githubusercontent.com/shaunmulligan/runtt-zephyr-module/"
            f"{module_ref}/scripts/make-identity.py")
     return fetch(url, CACHE / "module" / module_ref / "make-identity.py",

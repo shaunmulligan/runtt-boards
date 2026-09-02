@@ -7,6 +7,8 @@ turns it into the things that used to be maintained by hand and in triplicate:
     --build-plan      what CI should build, one shell line per supported board
     --collect DIR     copy each provisioning artefact to its published asset name
     --release-notes   the markdown table that goes in the GitHub release
+    --write-json      emit boards.json, so runtt-board needs no YAML parser
+    --check-json      exit non-zero if boards.json has drifted
     --readme-table    the markdown section for README.md
     --write-readme    replace that section in README.md in place
     --check-readme    exit non-zero if README.md has drifted from boards.yml
@@ -16,6 +18,7 @@ fails the build when the copies disagree is what stops the drift, because
 otherwise the generator is one more thing to remember to run.
 """
 import argparse
+import json
 import pathlib
 import shutil
 import subprocess
@@ -25,6 +28,10 @@ import yaml
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = REPO / "boards.yml"
+# The same manifest as JSON. `runtt-board` is meant to work as a single
+# downloaded file, and requiring pyyaml broke that on any machine without it --
+# stdlib json does not. boards.yml stays the editable source; this is generated.
+MANIFEST_JSON = REPO / "boards.json"
 README = REPO / "README.md"
 RELEASES = "https://github.com/shaunmulligan/runtt-boards/releases"
 
@@ -140,6 +147,8 @@ def main():
     g.add_argument("--build-plan", action="store_true")
     g.add_argument("--collect", metavar="DIR")
     g.add_argument("--release-notes", action="store_true")
+    g.add_argument("--write-json", action="store_true")
+    g.add_argument("--check-json", action="store_true")
     g.add_argument("--readme-table", action="store_true")
     g.add_argument("--write-readme", action="store_true")
     g.add_argument("--check-readme", action="store_true")
@@ -158,6 +167,15 @@ def main():
     elif args.write_readme:
         README.write_text(_splice(README.read_text(), readme_table(boards)))
         print(f"  updated {README.name} from {MANIFEST.name}")
+    elif args.write_json:
+        MANIFEST_JSON.write_text(json.dumps({"boards": boards}, indent=2) + "\n")
+        print(f"  wrote {MANIFEST_JSON.name} from {MANIFEST.name}")
+    elif args.check_json:
+        want = json.dumps({"boards": boards}, indent=2) + "\n"
+        if not MANIFEST_JSON.is_file() or MANIFEST_JSON.read_text() != want:
+            sys.exit("boards.json has drifted from boards.yml.\n"
+                     "  Run: scripts/boards.py --write-json")
+        print("  boards.json matches boards.yml")
     elif args.check_readme:
         want = _splice(README.read_text(), readme_table(boards))
         if want != README.read_text():

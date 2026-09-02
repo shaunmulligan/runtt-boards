@@ -172,10 +172,20 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install --quiet pyyaml
-      - name: boards.yml is valid and the README matches it
+      - name: boards.yml is valid, and its derived copies match
         run: |
           ./scripts/boards.py --build-plan
           ./scripts/boards.py --check-readme
+          ./scripts/boards.py --check-json
+
+      # The single-file path must keep working on a machine with no pyyaml. That
+      # is the whole point of boards.json, and it is easy to break by adding an
+      # import, so prove it rather than assume it.
+      - name: runtt-board works without a YAML parser
+        run: |
+          mkdir -p /tmp/blocker
+          printf 'raise ImportError("simulated: no pyyaml")\n' > /tmp/blocker/yaml.py
+          PYTHONPATH=/tmp/blocker ./scripts/runtt-board list
 
   shellcheck:
     runs-on: ubuntu-24.04

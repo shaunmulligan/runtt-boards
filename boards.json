@@ -1,0 +1,76 @@
+{
+  "boards": [
+    {
+      "id": "rpi_pico/rp2040/mcuboot",
+      "name": "Raspberry Pi Pico",
+      "soc": "RP2040",
+      "status": "supported",
+      "build": {
+        "script": "scripts/build-pico.sh",
+        "mode": "provision"
+      },
+      "provision": [
+        {
+          "from": "build-pico-idle/provision.uf2",
+          "as": "provision-rpi_pico.uf2"
+        }
+      ],
+      "flash": "Hold BOOTSEL, plug in, copy the file onto the drive that appears",
+      "probe": false,
+      "notes": "Unbrickable \u2014 the RP2040 mask ROM always gives you BOOTSEL back",
+      "program": {
+        "method": "uf2",
+        "volume_label": "RPI-RP2",
+        "bootsel_usb": "2e8a:0003"
+      },
+      "identity": {
+        "offset": 270204928
+      }
+    },
+    {
+      "id": "adafruit_feather_nrf52840/nrf52840",
+      "name": "Adafruit Feather nRF52840",
+      "soc": "nRF52840",
+      "status": "supported",
+      "build": {
+        "script": "scripts/build-feather.sh",
+        "mode": "provision"
+      },
+      "provision": [
+        {
+          "from": "build-feather-idle/mcuboot/zephyr/zephyr.hex",
+          "as": "provision-adafruit_feather_nrf52840-mcuboot.hex"
+        },
+        {
+          "from": "build-feather-idle/provision-slot0.hex",
+          "as": "provision-adafruit_feather_nrf52840-slot0.hex"
+        }
+      ],
+      "flash": "SWD, both files in order without resetting in between",
+      "probe": true,
+      "program": {
+        "method": "swd",
+        "target": "nrf52840",
+        "backup": true
+      },
+      "identity": {
+        "offset": 1015808
+      },
+      "notes": "Back the board up first \u2014 this erases the Adafruit UF2 bootloader and its UICR settings, and there is no ROM loader to fall back on"
+    },
+    {
+      "id": "esp32s3_devkitc/esp32s3/procpu",
+      "name": "Waveshare ESP32-S3 (DevKitC-compatible)",
+      "soc": "ESP32-S3",
+      "status": "in-progress",
+      "notes": "Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen \u2014 see docs/HARDWARE_TARGETS.md"
+    },
+    {
+      "id": "feather_canbus_rp2040",
+      "name": "Adafruit RP2040 CAN Bus Feather",
+      "soc": "RP2040 + MCP25625",
+      "status": "in-progress",
+      "notes": "Hardware on order. Zephyr has the board and `zephyr,canbus` is already chosen, but it ships no MCUboot slots, so a partition variant needs writing"
+    }
+  ]
+}
