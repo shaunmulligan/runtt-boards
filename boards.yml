@@ -59,13 +59,20 @@ boards:
     identity:
       offset: 0x101b0000
 
-  # Bring-up in progress. Four of the six checks in docs/PORTING.md pass on real
-  # hardware: describe reports the board and 2 channels, a deploy uploads/swaps/
-  # confirms, logs reach container stdio, and a provisioning-image board
-  # enumerates with both contract channels. Still to do: the revert test (a
-  # deliberately broken image must fail to confirm) and the unplug test. Not
-  # promoted to `supported` until both pass -- a half-checked port is worse than
-  # none, because someone will trust it.
+  # Bring-up in progress. FIVE of the six checks in docs/PORTING.md pass on real
+  # hardware: describe reports the board and 2 channels; a deploy uploads, swaps
+  # and confirms; logs reach container stdio; a deliberately unmanageable image
+  # (CONFIG_MCUMGR_TRANSPORT_UART=n -- it boots, it just cannot be talked to)
+  # fails to confirm and MCUboot reverts; and the provisioning image flashed by
+  # BOOTSEL drag-and-drop enumerates and reports itself freshly provisioned.
+  #
+  # The sixth is unmet: unplugging must exit non-zero so a restart policy fires.
+  # It needs someone at the bench. Halting the core over SWD is NOT a substitute
+  # and was tried -- RP2350's USB device controller keeps answering the host in
+  # hardware, so the device stays enumerated with the CPU stopped.
+  #
+  # Not promoted to `supported` until that passes. A half-checked port is worse
+  # than none, because someone will trust it.
   #
   # Needs no new snippet files at all. The module's `/rpi_pico.*/` board regex
   # already matches (Zephyr anchors it against "$BOARD/$BOARD_QUALIFIERS"), and
