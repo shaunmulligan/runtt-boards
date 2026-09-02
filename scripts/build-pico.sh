@@ -33,8 +33,8 @@ unset ZEPHYR_TOOLCHAIN_VARIANT
 
 build_bringup() {
   echo "=== bringup: plain rpi_pico (no bootloader, no image management) ==="
-  west build -p always -b rpi_pico --snippet runtt firmware/app \
-    -d build-pico -- -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt"
+  west build -p always -b rpi_pico --snippet runtt app \
+    -d build-pico
   echo
   echo "  flash by drag-and-drop: hold BOOTSEL, plug in, then"
   echo "    cp build-pico/zephyr/zephyr.uf2 /media/\$USER/RPI-RP2/"
@@ -45,10 +45,9 @@ build_mcuboot() {
   # -Dapp_SNIPPET rather than --snippet. With sysbuild, --snippet applies the
   # snippet to EVERY image, which would enable MCUmgr, our module and a dual CDC
   # composite inside the bootloader.
-  west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild firmware/app \
+  west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild app \
     -d build-pico-mcuboot -- \
-    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt" \
-    -Dapp_SNIPPET=runtt
+       -Dapp_SNIPPET=runtt
 
   local boot_bin=build-pico-mcuboot/mcuboot/zephyr/zephyr.bin
   local signed=build-pico-mcuboot/app/zephyr/zephyr.signed.bin
@@ -88,16 +87,15 @@ warn_dev_key() {
     echo "     $key"
     echo "     That private key is public. Any image signed with it will verify,"
     echo "     so no trust root is enrolled. Fine for the bench; never for a fleet."
-    echo "     See firmware/sysbuild-common.conf."
+    echo "     See sysbuild-common.conf."
   fi
 }
 
 build_provision() {
   echo "=== provision: runtt-idle + MCUboot, one flashable image ==="
-  west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild firmware/idle \
+  west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild idle \
     -d build-pico-idle -- \
-    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt" \
-    -Didle_SNIPPET=runtt
+       -Didle_SNIPPET=runtt
   echo
   python3 scripts/make-provision-uf2.py \
     --build-dir build-pico-idle \

@@ -8,6 +8,8 @@ manifest:
   remotes:
     - name: upstream
       url-base: https://github.com/zephyrproject-rtos
+    - name: runtt
+      url-base: https://github.com/shaunmulligan
 
   projects:
     - name: zephyr
@@ -37,6 +39,28 @@ manifest:
           - tf-psa-crypto
           - tinycrypt
 
+    # The device half of the wire contract. Declared here rather than reached
+    # with ZEPHYR_EXTRA_MODULES: west registers it as a Zephyr module
+    # automatically, so `west build` finds its Kconfig, CMakeLists and snippet
+    # with no extra flags. That is the whole point of it being a west module.
+    #
+    # `revision` is a branch while the project is pre-1.0. Pin a tag before
+    # anyone depends on a provisioning image built from here, or a module commit
+    # can change what a released image contains.
+    - name: runtt-zephyr-module
+      remote: runtt
+      revision: main
+      path: modules/runtt
+
   self:
-    path: firmware
+    # Where this repository sits inside the workspace. It was `firmware` when
+    # this manifest lived in a monorepo subdirectory; standing alone it is the
+    # manifest repo itself, so a workspace looks like:
+    #
+    #   ws/boards/        <- this repository
+    #   ws/zephyr/
+    #   ws/modules/runtt/
+    #
+    # Set up with:  west init -l boards && west update
+    path: boards
     west-commands: ""

@@ -52,7 +52,7 @@ warn_dev_key() {
     echo "     That private key is public. Any image signed with it will verify,"
     echo "     so no trust root is enrolled. Fine for the bench; never for a fleet."
     echo "     On this board the public half is baked into MCUboot at 0x0, so"
-    echo "     rotating it means another SWD flash. See firmware/sysbuild-common.conf."
+    echo "     rotating it means another SWD flash. See sysbuild-common.conf."
   fi
 }
 
@@ -74,8 +74,8 @@ build_bringup() {
   echo "=== bringup: plain $BOARD (no bootloader, no image management) ==="
   # Plain -S here, not -Dapp_SNIPPET: this is a NON-sysbuild build, so there is
   # no bootloader image for a top-level snippet to leak into.
-  west build -p always -b "$BOARD" --snippet runtt firmware/examples/app1 \
-    -d build-feather-bringup -- -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt"
+  west build -p always -b "$BOARD" --snippet runtt app \
+    -d build-feather-bringup
   echo
   echo "  flash it over SWD (no BOOTSEL on this board):"
   echo "    pyocd flash -t nrf52840 build-feather-bringup/zephyr/zephyr.hex"
@@ -86,10 +86,9 @@ build_mcuboot() {
   # -Dapp1_SNIPPET rather than --snippet: under sysbuild a top-level snippet
   # applies to EVERY image, which would pull MCUmgr, our module and a dual CDC
   # composite into the bootloader -- and into 48 KB, it would not fit.
-  west build -p always -b "$BOARD" --sysbuild firmware/examples/app1 \
+  west build -p always -b "$BOARD" --sysbuild app \
     -d build-feather -- \
-    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt" \
-    -Dapp1_SNIPPET=runtt
+       -Dapp1_SNIPPET=runtt
   echo
   check_boot_fits build-feather
   local signed=build-feather/app1/zephyr/zephyr.signed.bin
@@ -118,10 +117,9 @@ PY
 
 build_provision() {
   echo "=== provision: runtt-idle + MCUboot, for SWD ==="
-  west build -p always -b "$BOARD" --sysbuild firmware/idle \
+  west build -p always -b "$BOARD" --sysbuild idle \
     -d build-feather-idle -- \
-    -DZEPHYR_EXTRA_MODULES="$REPO/firmware/runtt" \
-    -Didle_SNIPPET=runtt
+       -Didle_SNIPPET=runtt
   echo
   check_boot_fits build-feather-idle
 
@@ -135,7 +133,7 @@ build_provision() {
   local key version out
   key=$(grep -oP '(?<=^CONFIG_BOOT_SIGNATURE_KEY_FILE=").*(?=")' \
         build-feather-idle/mcuboot/zephyr/.config)
-  version=$(grep -oP '(?<=^VERSION_MAJOR = ).*' firmware/idle/VERSION 2>/dev/null || echo 0)
+  version=$(grep -oP '(?<=^VERSION_MAJOR = ).*' idle/VERSION 2>/dev/null || echo 0)
   out=build-feather-idle/provision-slot0.hex
 
   python3 bootloader/mcuboot/scripts/imgtool.py sign \
