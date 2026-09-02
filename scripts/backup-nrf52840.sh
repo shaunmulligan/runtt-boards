@@ -17,7 +17,13 @@ TARGET=nrf52840
 FLASH_SIZE=0x100000       # 1 MB internal flash
 UICR_ADDR=0x10001000
 UICR_SIZE=0x400
-FICR_VARIANT=0x10000130   # FICR.INFO.VARIANT -- build code, e.g. "AAF0"
+# FICR.INFO.VARIANT. This said 0x10000130 for a long time, which is not the
+# VARIANT register: on a real nRF52840 it reads 0x00000008, decodes to control
+# characters as ASCII, and therefore never matches the *F0 test below. The
+# revision-3 APPROTECT warning -- the whole reason this block exists -- could
+# not fire on any part. Verified against the part on the bench: 0x10000104
+# reads 0x41414330, "AAC0", which is the documented four-ASCII-byte build code.
+FICR_VARIANT=0x10000104   # FICR.INFO.VARIANT -- build code, e.g. "AAF0"
 UICR_APPROTECT=0x10001208
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -34,14 +40,36 @@ if [[ "${1:-}" == "--check" ]]; then
 fi
 
 OUTDIR="${1:-nrf52840-backup-$(date +%Y%m%d-%H%M%S)}"
-[[ -e "$OUTDIR" ]] && die "$OUTDIR already exists; refusing to overwrite a backup"
+# Refuse to overwrite an actual backup, not merely a directory. The earlier
+# check was `[[ -e "$OUTDIR" ]]`, and since mkdir runs before the first SWD
+# read, any failed run left an empty directory that then blocked every retry
+# with "refusing to overwrite a backup" -- of nothing.
+if [[ -e "$OUTDIR" ]]; then
+  if [[ -n "$(ls -A "$OUTDIR" 2>/dev/null)" ]]; then
+    die "$OUTDIR already exists and is not empty; refusing to overwrite a backup"
+  fi
+  echo "note: reusing the empty directory $OUTDIR"
+fi
 mkdir -p "$OUTDIR"
 cd "$OUTDIR"
 
-# read32 prints a line like: 10000130: 0041414630
+# pyocd prints `read32` as "10000104:  41414330" -- an address, a colon, then
+# the value, with NO 0x prefix on either. This used to grep for
+# '0x[0-9a-fA-F]{8}' and so matched nothing at all, on any part: the script died
+# at step 1 every time it was run with a board attached, claiming the probe was
+# unwired. Anchor on the colon and take the value after it.
+#
+# auto_unlock=false on every call, and this matters more here than anywhere
+# else. pyocd defaults it to TRUE, so connecting to a part whose APPROTECT is
+# enabled triggers a CTRL-AP ERASEALL to gain access -- which would erase the
+# flash and UICR that this script exists to preserve, as its first act. A
+# backup tool must fail to connect rather than unlock.
+PYOCD_RO=(-O auto_unlock=false)
+
 read_word() {
-  pyocd cmd -t "$TARGET" -c "read32 $1" 2>/dev/null \
-    | grep -oE '0x[0-9a-fA-F]{8}' | tail -1
+  pyocd cmd -t "$TARGET" "${PYOCD_RO[@]}" -c "read32 $1" 2>/dev/null \
+    | sed -n 's/^[0-9a-fA-F]\{1,\}:[[:space:]]*\(0x\)\{0,1\}\([0-9a-fA-F]\{8\}\).*/\2/p' \
+    | tail -1
 }
 
 echo "=== 1. Identify the part, before touching anything ==="
@@ -77,9 +105,9 @@ echo
 
 echo "=== 2. Dump flash and UICR ==="
 echo "  flash 0x0..$FLASH_SIZE -> flash_full.bin  (1 MB, takes a moment)"
-pyocd cmd -t "$TARGET" -c "savemem 0x0 $FLASH_SIZE flash_full.bin"
+pyocd cmd -t "$TARGET" "${PYOCD_RO[@]}" -c "savemem 0x0 $FLASH_SIZE flash_full.bin"
 echo "  UICR  $UICR_ADDR    -> uicr.bin"
-pyocd cmd -t "$TARGET" -c "savemem $UICR_ADDR $UICR_SIZE uicr.bin"
+pyocd cmd -t "$TARGET" "${PYOCD_RO[@]}" -c "savemem $UICR_ADDR $UICR_SIZE uicr.bin"
 
 echo
 echo "=== 3. Verify the dumps are the size they claim ==="
@@ -107,7 +135,27 @@ sha256sum flash_full.bin uicr.bin | tee BACKUP.sha256
 echo
 echo "=== Backup complete: $OUTDIR ==="
 echo
-echo "To restore (this puts the Adafruit bootloader back):"
+# Say what this dump actually contains rather than what it contained the first
+# time anyone ran this. The message used to read "this puts the Adafruit
+# bootloader back", which is only true of a backup taken before MCUboot was
+# ever flashed. Taken from a board already running runtt it restores MCUboot and
+# the runtt application -- and a user who reaches for a backup is usually
+# reaching for the stock bootloader, so the wrong claim points them at a restore
+# that will not give them what they want.
+echo "This dump contains:"
+python3 - "$PWD/flash_full.bin" <<'PY'
+import pathlib, struct, sys
+d = pathlib.Path(sys.argv[1]).read_bytes()
+if d[0xc000:0xc004] == struct.pack("<I", 0x96f3b83d):
+    print("  - an MCUboot-signed image in slot0 (0xc000)")
+if b"UF2 Bootloader" in d[0xf0000:]:
+    print("  - remnants of the Adafruit UF2 bootloader in the top of flash")
+if d[0xf8000:0xf8004] == b"rntt":
+    ser = d[0xf800c:0xf801c].split(b"\x00")[0].decode("ascii", "replace")
+    print(f"  - a runtt identity record at 0xf8000, serial {ser!r}")
+PY
+echo
+echo "To restore exactly this state:"
 echo "  pyocd erase -t $TARGET --chip"
 echo "  pyocd flash -t $TARGET --base-address 0x0 $OUTDIR/flash_full.bin"
 echo "  pyocd flash -t $TARGET --base-address $UICR_ADDR $OUTDIR/uicr.bin"

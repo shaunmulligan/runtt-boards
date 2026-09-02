@@ -7,6 +7,16 @@ MCUboot defines whose firmware the board will ever accept. That is why it cannot
 be done over the air, and why it is the only step that needs someone at the
 bench.
 
+> **Paths below are from the monorepo layout these transcripts were recorded
+> in.** The repositories have since been split, so `firmware/app` is now
+> `boards/app-test` (or `boards/idle`) in
+> [`runtt-boards`](https://github.com/shaunmulligan/runtt-boards),
+> `firmware/bringup` is `boards/bringup`, and `firmware/runtt` is its own
+> repository, checked out by west at `modules/runtt`. The commands are left as
+> they were run rather than retyped untested; `-DZEPHYR_EXTRA_MODULES` in
+> particular is no longer needed at all, because west now registers the module
+> from the manifest. See `scripts/build-feather.sh` for the current invocation.
+
 ## Raspberry Pi Pico (RP2040) — no probe required
 
 RP2040 has a **mask-ROM bootloader** that cannot be erased or overwritten. Hold
@@ -117,7 +127,7 @@ Prove the wiring before anything destructive. This reads the chip ID and writes
 nothing:
 
 ```bash
-pyocd cmd -t nrf52840 -c "read32 0x10000130"   # FICR.INFO.VARIANT
+pyocd cmd -t nrf52840 -c "read32 0x10000104"   # FICR.INFO.VARIANT
 ```
 
 [rpi-debug-spec]: https://datasheets.raspberrypi.com/debug/debug-connector-specification.pdf
@@ -144,7 +154,7 @@ UICR. UICR holds `BOOTLOADERADDR`, so a flash restored without it leaves the
 Adafruit bootloader physically present but unfindable. `backup-nrf52840.sh`
 takes both, checksums them, and refuses to call an all-`0xff` read a backup.
 
-It also reads `FICR.INFO.VARIANT` (`0x10000130`) and `UICR.APPROTECT`
+It also reads `FICR.INFO.VARIANT` (`0x10000104`) and `UICR.APPROTECT`
 (`0x10001208`) before touching anything. A build code ending `F0` means a
 revision 3 part, where APPROTECT is enabled in hardware at every reset.
 
@@ -335,8 +345,41 @@ the DMA", which is a mistake worth not repeating.
 
 ## Feather: full provisioning with MCUboot
 
-Verified 2026-08-30, end to end: `docker run` deploys firmware to an Adafruit
+Verified 2026-08-30, end to end: a container run deploys firmware to an Adafruit
 Feather nRF52840 and MCUboot swaps and confirms it.
+
+Re-verified 2026-09-02 through the consolidated tool, from the published release
+rather than a local build:
+
+```
+$ runtt-board provision adafruit_feather_nrf52840/nrf52840 --name feather-01
+  checksums verified (2 files)
+  backup: ../feather-backup-20260902 (checksums verified)
+  $ pyocd flash -t nrf52840 .../provision-adafruit_feather_nrf52840-mcuboot.hex
+  Erased 40960 bytes (10 sectors), programmed 40960 bytes at 23.89 kB/s
+  $ pyocd flash -t nrf52840 .../provision-adafruit_feather_nrf52840-slot0.hex
+  Erased 81920 bytes (20 sectors), programmed 81920 bytes at 24.46 kB/s
+  $ pyocd flash -t nrf52840 --base-address 0xf8000 .../identity.bin
+
+$ podman run --rm --network none --runtime=.../runtt \
+    --annotation dev.runtt.target=usb:feather-01 app:v1
+  mcu: board serial feather-01
+  mcu: device is adafruit_feather_nrf52840/nrf52840 freshly provisioned,
+       awaiting its first firmware (contract 2.0.0, 2 channels)
+  mcu: uploading 80008/80008 bytes (100%)
+  mcu: image staged and marked test, resetting
+  mcu: image confirmed
+  <inf> runtt_identity: provisioned: can node id 0xffff, serial "feather-01"
+  <inf> usbd_init: bNumInterfaces 4 wTotalLength 141
+  <inf> runtt_usbd: USB device up with all contract channels registered
+  <inf> app: alive, tick 0
+```
+
+Two things that come out of that transcript rather than from reasoning. The
+board is addressed by **serial**, not port path, so the identity record written
+at `0xf8000` is what the placement label resolves against. And a second run of
+the same image reports `device already runs this digest, confirmed; nothing to
+do` — the deploy is idempotent, and re-running it does not re-flash.
 
 **This is the destructive step.** It overwrites the Nordic MBR, the SoftDevice
 and the Adafruit UF2 bootloader -- `slot1_partition` spans `0xf4000`, where the
