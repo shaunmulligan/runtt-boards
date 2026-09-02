@@ -71,6 +71,25 @@ wrong", and those two failures look identical from inside a runtt build.
 
 ---
 
+### RP2350 (Pico 2 / Pico 2 W): connect under reset
+
+pyocd cannot attach to an RP2350 on the first try:
+
+```
+Error while initing target: Unable to set target to secure mode
+```
+
+RP2350's flash routines live in ROM and require the core to be in secure state.
+pyocd forces that by writing `DSCSR.CDS` and aborts if the core does not come
+back secure (`pyocd/target/family/target_rp2.py`). Connecting under reset gets
+past it, and once you have, later connections work too:
+
+```bash
+pyocd flash -t rp2350 -O connect_mode=under-reset firmware.hex
+```
+
+RP2040 has no secure state to negotiate and never hits this.
+
 ## 2. Board configuration, in the module repo
 
 In [`runtt-zephyr-module`](https://github.com/shaunmulligan/runtt-zephyr-module),

@@ -69,6 +69,15 @@ def main() -> int:
     ap.add_argument("--image", default=None,
                     help="sysbuild image name (defaults to the sole non-mcuboot image)")
     ap.add_argument("--zephyr-base", default="zephyr")
+    # The UF2 family id is checked by the boot ROM, and a wrong one is rejected
+    # rather than misflashed -- so it is a per-SoC value, not a detail. RP2040 is
+    # 0xe48bff56 and RP2350 is 0xe48bff57 in Zephyr's uf2families.json, which is
+    # also what Zephyr's own `west build` emits for each board. (Raspberry Pi's
+    # own scheme calls 0xe48bff57 "absolute" and reserves 0xe48bff59 for
+    # "RP2350-ARM-S"; we follow what Zephyr emits for the board, because that is
+    # what the board's own UF2s carry.)
+    ap.add_argument("--family", default="RP2040",
+                    help="uf2conv family id name, e.g. RP2040 or RP2350")
     # No usable default: MCUboot lives at the WEST WORKSPACE root, which is the
     # parent of this repository, so any path relative to the CWD is wrong as
     # often as it is right. Callers pass --mcuboot "$(west topdir)/bootloader/mcuboot".
@@ -134,14 +143,20 @@ def main() -> int:
 
         flat_bin = td / "flat.bin"
         flat_bin.write_bytes(bytes(flat))
-        run([sys.executable, str(zbase / "scripts/build/uf2conv.py"), "-c", "-f", "RP2040",
+        run([sys.executable, str(zbase / "scripts/build/uf2conv.py"), "-c",
+             "-f", args.family,
              "-b", hex(FLASH_BASE), "-o", str(out), str(flat_bin)])
 
     print(f"  provisioning image: {out} ({out.stat().st_size} bytes)")
     print(f"    payload: {image}")
     print(f"    one contiguous region {FLASH_BASE:#010x} .. "
           f"{SLOT0_ADDR + SLOT0_SIZE:#010x}")
-    print(f"    boot2 + MCUboot, app in slot 0 ({body_end} bytes), confirmed trailer")
+    # RP2040 needs a 256-byte second-stage bootloader at 0x0 and puts MCUboot at
+    # 0x100; RP2350's boot ROM reads flash directly and MCUboot starts at 0x0.
+    # Either way the layout comes from MCUboot's own hex rather than from here,
+    # so this line only has to describe what it did.
+    print(f"    MCUboot from its hex, app in slot 0 ({body_end} bytes), "
+          f"confirmed trailer, family {args.family}")
     return 0
 
 

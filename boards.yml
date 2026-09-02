@@ -59,6 +59,48 @@ boards:
     identity:
       offset: 0x101b0000
 
+  # All six checks in docs/PORTING.md pass on real hardware (2026-09-02):
+  # describe reports the board and 2 channels; a deploy uploads, swaps and
+  # confirms; logs reach container stdio; a deliberately unmanageable image
+  # (CONFIG_MCUMGR_TRANSPORT_UART=n -- it boots, it just cannot be talked to)
+  # fails to confirm and MCUboot reverts; the provisioning image flashed by
+  # BOOTSEL drag-and-drop enumerates and reports itself freshly provisioned; and
+  # unplugging exits non-zero ("lost contact with the device after 2
+  # heartbeats"), so a restart policy fires.
+  #
+  # One note for whoever tests the unplug case again: halting the core over SWD
+  # is NOT a substitute, and was tried. RP2350's USB device controller goes on
+  # answering the host in hardware, so the device stays enumerated with the CPU
+  # stopped and the runtime sees nothing wrong.
+  #
+  # Needs no new snippet files at all. The module's `/rpi_pico.*/` board regex
+  # already matches (Zephyr anchors it against "$BOARD/$BOARD_QUALIFIERS"), and
+  # the RP2040 .conf/.overlay are correct for RP2350: same `raspberrypi,pico-usbd`
+  # driver, same `zephyr_udc0` label, also 16 bidirectional endpoints. Verified in
+  # the linked ELF, not inferred from Kconfig.
+  - id: rpi_pico2/rp2350a/m33/w/mcuboot
+    name: Raspberry Pi Pico 2 W
+    soc: RP2350
+    status: supported
+    build:
+      script: scripts/build-pico2w.sh
+      mode: provision
+    provision:
+      - from: build-pico2w-idle/provision.uf2
+        as: provision-rpi_pico2w.uf2
+    flash: Hold BOOTSEL, plug in, copy the file onto the drive that appears
+    probe: false
+    notes: Unbrickable — the RP2350 boot ROM always gives BOOTSEL back
+    program:
+      method: uf2
+      volume_label: RP2350
+      bootsel_usb: "2e8a:000f"
+    identity:
+      # Same as RP2040, and not a copy-paste: RP2350's storage_partition is also
+      # at 0x1b0000, and the XIP window is also 0x10000000. The unmapped 0x1b0000
+      # writes nowhere and fails silently.
+      offset: 0x101b0000
+
   - id: adafruit_feather_nrf52840/nrf52840
     name: Adafruit Feather nRF52840
     soc: nRF52840

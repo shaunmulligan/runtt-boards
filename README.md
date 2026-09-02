@@ -56,6 +56,7 @@ fine for one board and a collision waiting to happen for two, so prefer
 | Board | Download | Probe needed? | How |
 |---|---|---|---|
 | **Raspberry Pi Pico** (RP2040) | [`provision-rpi_pico.uf2`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-rpi_pico.uf2) | **No** | Hold BOOTSEL, plug in, copy the file onto the drive that appears. Unbrickable — the RP2040 mask ROM always gives you BOOTSEL back |
+| **Raspberry Pi Pico 2 W** (RP2350) | [`provision-rpi_pico2w.uf2`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-rpi_pico2w.uf2) | **No** | Hold BOOTSEL, plug in, copy the file onto the drive that appears. Unbrickable — the RP2350 boot ROM always gives BOOTSEL back |
 | **Adafruit Feather nRF52840** (nRF52840) | [`provision-adafruit_feather_nrf52840-mcuboot.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-mcuboot.hex) + [`provision-adafruit_feather_nrf52840-slot0.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-slot0.hex) | Yes, SWD | SWD, both files in order without resetting in between. **Back the board up first — this erases the Adafruit UF2 bootloader and its UICR settings, and there is no ROM loader to fall back on**  |
 
 Check what you downloaded against [`SHA256SUMS`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/SHA256SUMS). Those

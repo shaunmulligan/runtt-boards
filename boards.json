@@ -28,6 +28,33 @@
       }
     },
     {
+      "id": "rpi_pico2/rp2350a/m33/w/mcuboot",
+      "name": "Raspberry Pi Pico 2 W",
+      "soc": "RP2350",
+      "status": "supported",
+      "build": {
+        "script": "scripts/build-pico2w.sh",
+        "mode": "provision"
+      },
+      "provision": [
+        {
+          "from": "build-pico2w-idle/provision.uf2",
+          "as": "provision-rpi_pico2w.uf2"
+        }
+      ],
+      "flash": "Hold BOOTSEL, plug in, copy the file onto the drive that appears",
+      "probe": false,
+      "notes": "Unbrickable \u2014 the RP2350 boot ROM always gives BOOTSEL back",
+      "program": {
+        "method": "uf2",
+        "volume_label": "RP2350",
+        "bootsel_usb": "2e8a:000f"
+      },
+      "identity": {
+        "offset": 270204928
+      }
+    },
+    {
       "id": "adafruit_feather_nrf52840/nrf52840",
       "name": "Adafruit Feather nRF52840",
       "soc": "nRF52840",
