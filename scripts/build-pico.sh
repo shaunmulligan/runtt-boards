@@ -75,8 +75,10 @@ build_mcuboot() {
   # why the trailer matters.
   python3 scripts/make-provision-uf2.py \
     --mcuboot "$TOPDIR/bootloader/mcuboot" \
+    --build-dir build-pico-mcuboot \
     --zephyr-base "$ZEPHYR_BASE" \
-    --objcopy "$ZEPHYR_SDK_INSTALL_DIR/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy"
+    --objcopy "$ZEPHYR_SDK_INSTALL_DIR/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy" \
+    -o build-pico-mcuboot/provision.uf2
   echo "    hold BOOTSEL, plug in, then:"
   echo "      cp build-pico-mcuboot/provision.uf2 \"\$(findmnt -rn -o TARGET /dev/sda1)/\""
   echo

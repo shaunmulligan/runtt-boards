@@ -58,7 +58,14 @@ def read_hex(path):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--build-dir", default="build-pico-idle")
+    # Required, no default. It defaulted to build-pico-idle, which is one of the
+    # two directories a caller might mean -- so build-pico.sh's mcuboot mode
+    # silently pointed at the provisioning build instead of its own. It only
+    # surfaced in CI, where mcuboot runs BEFORE provision so the directory does
+    # not exist yet; locally the stale directory from an earlier run made it look
+    # correct. A default that is right half the time is worse than none.
+    ap.add_argument("--build-dir", required=True,
+                    help="the sysbuild build directory to read images from")
     ap.add_argument("--image", default=None,
                     help="sysbuild image name (defaults to the sole non-mcuboot image)")
     ap.add_argument("--zephyr-base", default="zephyr")
