@@ -24,6 +24,12 @@ Check what you downloaded against [`SHA256SUMS`](https://github.com/shaunmulliga
 always resolve to the newest release; [older
 releases](https://github.com/shaunmulligan/runtt-boards/releases) stay available.
 
+> Every release asset is an individual file with its own URL, so you download the
+> one image for your board and nothing else. The zipped
+> `ci-provisioning-images.zip` on a workflow run page is **not** this — GitHub
+> zips all build artefacts and cannot serve one file out of them. Use the links
+> above.
+
 ⚠️ **These images are signed with MCUboot's published development key**, so no
 trust root is enrolled and an image signature proves nothing. That is fine on a
 bench and unfit for a fleet — generate your own key first, and note that on the

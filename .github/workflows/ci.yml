@@ -139,17 +139,24 @@ jobs:
           cp build-can/zephyr/zephyr.exe  fixtures/native_sim-runtt-can.exe
           ( cd fixtures && sha256sum * > SHA256SUMS )
 
-      - name: Upload provisioning images
+      # Artefact names say "ci-" because GitHub ZIPS every artefact and offers no
+      # way to pull one file out of the archive. So this is CI plumbing and a
+      # debugging aid, NOT the download path -- mistaking the two is easy, since
+      # a run page shows `provisioning-images.zip` and looks like the deliverable.
+      #
+      # The download path is a RELEASE, where each file is its own asset with its
+      # own URL. That is what the README links point at.
+      - name: Upload provisioning images (CI plumbing; releases are the download path)
         uses: actions/upload-artifact@v4
         with:
-          name: provisioning-images
+          name: ci-provisioning-images
           path: boards/out/
           retention-days: 14
 
       - name: Upload native_sim fixtures
         uses: actions/upload-artifact@v4
         with:
-          name: native-sim-fixtures
+          name: ci-native-sim-fixtures
           path: boards/fixtures/
           retention-days: 14
 
@@ -168,7 +175,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: provisioning-images
+          name: ci-provisioning-images
           path: out
 
       - name: Attach to the release
