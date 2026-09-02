@@ -32,6 +32,29 @@ the reasons. Read this before buying anything.
 | `scripts/flash-*.sh` | flashing over SWD or UF2. The Feather script refuses to run without a verified backup |
 | `scripts/setup-prereqs.sh` | one-time host setup; `--check` just verifies |
 
+## Why there are two applications
+
+They look like duplication and are not: their requirements conflict.
+
+| | `app/` | `idle/` |
+|---|---|---|
+| Role | test fixture, and per-board build proof | shipped in every provisioning image |
+| Logging | `alive, tick N` every 2 s | one line, then sleeps forever |
+| Size | ordinary | minimal — `LOG_MODE_MINIMAL`, 1 KB stack |
+| `CONFIG_RUNTT_IDLE` | off | **on** |
+
+`app/` has to keep talking, because [`runtt`](https://github.com/shaunmulligan/runtt)'s
+end-to-end gates assert that application output reaches the log channel — and the
+CAN gate greps a *recurring* line, since a raw CAN log channel has no backlog and
+a one-shot startup message would race the listener.
+
+`idle/` has to be quiet and small, because it is written into every provisioning
+image, where every byte is wasted flash and a slower write. It logs once and
+sleeps.
+
+One application cannot be both, and a flag switching between them would put the
+provisioning payload's size at the mercy of the test fixture's needs.
+
 ## Why `idle/` matters more than it looks
 
 MCUboot with an empty primary slot halts with *Unable to find bootable image* —
