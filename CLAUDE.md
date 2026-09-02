@@ -76,8 +76,7 @@ recorded reasons — why `idle/` exists at all, why the swap mode is pinned, why
 signing for the primary slot uses `--pad --confirm` rather than `--pad-header`.
 Each is a bug that cost real time. Keep that habit.
 
-**Never weaken a safety check to make something pass.** `flash-feather.sh`
-refuses to flash without a verified backup because that erase destroys a
+**Never weaken a safety check to make something pass.** `runtt-board flash` refuses to flash the Feather without a verified backup because that erase destroys a
 bootloader with no ROM loader behind it. If it is in the way, fix the backup.
 
 ## The two applications are not duplicates

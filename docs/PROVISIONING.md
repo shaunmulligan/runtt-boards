@@ -19,7 +19,7 @@ flash leaves you in BOOTSEL, ready to try again.
 
 ```bash
 ./scripts/build-pico.sh provision        # produces build-pico-idle/provision.uf2
-./scripts/flash-pico.sh build-pico-idle/provision.uf2
+./scripts/runtt-board flash rpi_pico
 ```
 
 Verify:
@@ -45,7 +45,7 @@ That cost an hour of debugging a bootloader that was behaving perfectly. It also
 scales badly with size: the small images completed by luck, the 1.8 MB
 provisioning image did not.
 
-`flash-pico.sh` writes with `oflag=sync`, and afterwards checks whether the board
+`runtt-board flash` writes and syncs, and afterwards checks whether the board
 actually left BOOTSEL, which is the only reliable signal that the flash was
 accepted.
 
@@ -129,10 +129,13 @@ Three commands, in this order:
 ```bash
 ./scripts/backup-nrf52840.sh          # FIRST. Not optional.
 ./scripts/build-feather.sh provision
-./scripts/flash-feather.sh build-feather-idle
+./scripts/runtt-board flash adafruit_feather_nrf52840
 ```
 
-`flash-feather.sh` refuses to run if it cannot find a backup directory.
+`runtt-board flash` refuses to run on the Feather if it cannot find a
+backup directory holding both `flash_full.bin` and `uicr.bin`, and verifies
+`BACKUP.sha256` when one is present -- a truncated backup restores to a brick as
+thoroughly as no backup.
 
 ### Why the backup is not boilerplate
 
@@ -156,7 +159,7 @@ route nRESET and the thread ends with no successful recovery.
 **The Feather routes RESET** — button and header pin — so that deadlock does not
 apply here. Two rules follow:
 
-* **Never reset between an erase and writing firmware.** `flash-feather.sh`
+* **Never reset between an erase and writing firmware.** `runtt-board flash`
   sends both images in one pyocd session for exactly this reason.
 * **Never set `CONFIG_NRF_APPROTECT_LOCK`** (`zephyr/soc/nordic/Kconfig`). It
   locks the debug port from `SystemInit()` on every boot. Zephyr's nRF52 default

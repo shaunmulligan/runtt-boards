@@ -20,9 +20,23 @@
 #   status       supported | in-progress. Only `supported` is built and published.
 #   build        script + mode that produces the provisioning image.
 #   provision    artefacts: source path in the build tree -> published asset name.
-#   flash        how a user gets it onto the board.
+#   flash        how a user gets it onto the board (prose, for the tables).
 #   probe        whether a debug probe is required.
 #   notes        anything a user must know BEFORE flashing. Appears in the tables.
+#   program      the mechanics scripts/runtt-board uses to write a board:
+#                  method        uf2 | swd
+#                  volume_label  (uf2) the mass-storage label to look for
+#                  bootsel_usb   (uf2) VID:PID when the board is in ROM loader mode
+#                  target        (swd) pyocd target name
+#                  backup        (swd) true when flashing destroys something
+#                                unrecoverable, so a verified backup is required
+#   identity     where the per-board identity record goes, so one image can be
+#                given a name at provisioning time:
+#                  offset        address of storage_partition. NOTE the RP2040
+#                                value is XIP-mapped -- flash offset 0x1b0000
+#                                appears at 0x101b0000 to the debugger and in a
+#                                UF2 -- and getting that wrong writes 256 MB into
+#                                nowhere and silently does nothing.
 
 boards:
   - id: rpi_pico/rp2040/mcuboot
@@ -38,6 +52,12 @@ boards:
     flash: Hold BOOTSEL, plug in, copy the file onto the drive that appears
     probe: false
     notes: Unbrickable — the RP2040 mask ROM always gives you BOOTSEL back
+    program:
+      method: uf2
+      volume_label: RPI-RP2
+      bootsel_usb: "2e8a:0003"
+    identity:
+      offset: 0x101b0000
 
   - id: adafruit_feather_nrf52840/nrf52840
     name: Adafruit Feather nRF52840
@@ -53,6 +73,12 @@ boards:
         as: provision-adafruit_feather_nrf52840-slot0.hex
     flash: SWD, both files in order without resetting in between
     probe: true
+    program:
+      method: swd
+      target: nrf52840
+      backup: true
+    identity:
+      offset: 0xf8000
     notes: >-
       Back the board up first — this erases the Adafruit UF2 bootloader and its
       UICR settings, and there is no ROM loader to fall back on

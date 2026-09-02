@@ -58,7 +58,7 @@ reasons.
 | `bringup/`, `diag/` | configurations for proving one thing at a time when a board misbehaves |
 | `builder/` | a reusable Docker build environment, so an application directory needs a six-line Dockerfile |
 | `scripts/build-*.sh` | per-board builds: bring-up, MCUboot, provisioning images |
-| `scripts/flash-*.sh` | flashing over SWD or UF2. The Feather script refuses to run without a verified backup |
+| `scripts/runtt-board` | one entry point: `list`, `build`, `provision`, `flash`, `backup`. Dispatches per board from `boards.yml` |
 | `scripts/setup-prereqs.sh` | one-time host setup; `--check` just verifies |
 
 ## Why there are two applications

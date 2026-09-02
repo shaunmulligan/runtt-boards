@@ -115,7 +115,7 @@ build_provision() {
     --objcopy "$ZEPHYR_SDK_INSTALL_DIR/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy" \
     -o build-pico-idle/provision.uf2
   echo
-  echo "  flash it with:  ./scripts/flash-pico.sh build-pico-idle/provision.uf2"
+  echo "  flash it with:  ./scripts/runtt-board flash rpi_pico"
   echo "  (hold BOOTSEL while plugging the board in first)"
   warn_dev_key build-pico-idle
 }

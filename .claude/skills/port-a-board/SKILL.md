@@ -160,8 +160,7 @@ runs. Check the artefact.
 first. A stale build directory once made a wrong default look correct for days,
 and it surfaced only in CI where the step order differs.
 
-**Never weaken a safety check to make something pass.** `flash-feather.sh`
-refusing to flash without a verified backup is protecting a bootloader with no ROM
+**Never weaken a safety check to make something pass.** `runtt-board flash` refusing to flash the Feather without a verified backup is protecting a bootloader with no ROM
 loader behind it.
 
 **Report what did not work.** A port with one unmet checkbox is useful

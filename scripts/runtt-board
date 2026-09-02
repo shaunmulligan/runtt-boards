@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+"""One entry point for every board in boards.yml.
+
+    runtt-board list
+    runtt-board build     <board> [mode]
+    runtt-board provision <board> --name NAME [--can-node-id 0x45]
+    runtt-board flash     <board> [image ...]
+    runtt-board backup    <board>
+
+Replaces the per-board flash scripts. They were the same shape three times over --
+find the device, write the image, verify -- differing only in mechanics that
+boards.yml can carry, so the mechanics moved there and this dispatches on them.
+Board-specific BUILD knowledge stays in scripts/build-*.sh: sysbuild modes and
+signing rules are genuinely per-board and consolidating them would lose detail.
+
+`provision` is the one worth having. It builds the image, writes a per-board
+identity record into it, and flashes the result -- so one firmware image serves a
+fleet and each board gets its name at provisioning time rather than at build time.
+"""
+import argparse
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
+
+import yaml
+
+REPO = pathlib.Path(__file__).resolve().parent.parent
+IDENTITY_RECORD_LEN = 32
+
+
+def die(msg):
+    sys.exit(f"error: {msg}")
+
+
+def run(cmd, **kw):
+    """Run a command, and on failure report ITS error rather than a Python
+    traceback. A traceback tells the reader about this script; the thing they
+    need is what the tool underneath said."""
+    print("  $ " + " ".join(str(c) for c in cmd))
+    r = subprocess.run(cmd, **kw)
+    if r.returncode != 0:
+        die(f"`{' '.join(str(c) for c in cmd)}` failed with exit {r.returncode}.\n"
+            "  Its own output is above.")
+    return r
+
+
+def topdir():
+    """The west workspace root. zephyr/ and modules/ sit beside this repo."""
+    try:
+        out = subprocess.run(["west", "topdir"], capture_output=True, text=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        die("not in a west workspace.\n"
+            "  mkdir ws && cd ws && git clone <this repo> boards"
+            " && west init -l boards && west update")
+    return pathlib.Path(out.stdout.strip())
+
+
+def boards():
+    with (REPO / "boards.yml").open() as f:
+        return yaml.safe_load(f)["boards"]
+
+
+def find(name):
+    bs = boards()
+    for b in bs:
+        if b["id"] == name or b["id"].split("/")[0] == name:
+            return b
+    ids = "\n".join(f"    {b['id']}   ({b['status']})" for b in bs)
+    die(f"no board matching {name!r} in boards.yml. Known:\n{ids}")
+
+
+def need_supported(b):
+    if b["status"] != "supported":
+        die(f"{b['name']} is {b['status']}, not supported.\n"
+            f"  {(b.get('notes') or '').strip()}\n"
+            f"  See docs/PORTING.md to finish the port.")
+
+
+# --- identity ---------------------------------------------------------------
+
+def make_identity(name, can_node_id, out):
+    """Write a record using the module's writer, which shares the layout with
+    include/runtt/identity.h. Deliberately not reimplemented here: two copies of
+    a binary layout in one project is one too many, and three would be absurd."""
+    writer = topdir() / "modules/runtt/scripts/make-identity.py"
+    if not writer.is_file():
+        die(f"{writer} not found. Run `west update` -- the identity record's\n"
+            "  writer lives in the runtt module, beside the C code that reads it.")
+    cmd = [sys.executable, str(writer), "--serial", name, "-o", str(out)]
+    if can_node_id:
+        cmd += ["--can-node-id", can_node_id]
+    run(cmd)
+    if out.stat().st_size != IDENTITY_RECORD_LEN:
+        die(f"identity record is {out.stat().st_size} bytes, expected {IDENTITY_RECORD_LEN}")
+
+
+UF2_MAGIC0, UF2_MAGIC1, UF2_MAGIC2 = 0x0A324655, 0x9E5D5157, 0x0AB16F30
+UF2_BLOCK = 512
+UF2_PAYLOAD = 256
+
+
+def uf2_merge(src_uf2, data, base_addr):
+    """Return `src_uf2` with `data` added at `base_addr`, RENUMBERED throughout.
+
+    Appending blocks is the obvious approach and produces a malformed file: every
+    block carries blockNo and numBlocks, so a naively appended block claims
+    numBlocks=1 while the rest of the file says 3584. The RP2040 bootrom may well
+    tolerate that -- it writes each block to its own targetAddr -- but "may well"
+    is not good enough for the one image a user flashes by hand, and there was no
+    Pico attached to find out. So the whole file is re-emitted with consistent
+    sequential numbering.
+    """
+    import struct
+    raw = pathlib.Path(src_uf2).read_bytes()
+    if len(raw) % UF2_BLOCK:
+        die(f"{src_uf2} is {len(raw)} bytes, not a whole number of UF2 blocks")
+
+    blocks = []
+    for i in range(len(raw) // UF2_BLOCK):
+        b = raw[i * UF2_BLOCK:(i + 1) * UF2_BLOCK]
+        m0, m1, flags, addr, size, _blkno, _numblk, family = struct.unpack("<IIIIIIII", b[:32])
+        if (m0, m1) != (UF2_MAGIC0, UF2_MAGIC1):
+            die(f"{src_uf2} block {i} has bad magic; is it really a UF2?")
+        blocks.append((flags, addr, size, family, b[32:32 + size]))
+
+    family = blocks[0][3]
+    flags = blocks[0][0]
+    for off in range(0, len(data), UF2_PAYLOAD):
+        chunk = data[off:off + UF2_PAYLOAD]
+        blocks.append((flags, base_addr + off, len(chunk), family, chunk))
+
+    out = bytearray()
+    total = len(blocks)
+    for i, (flags, addr, size, family, payload) in enumerate(blocks):
+        out += struct.pack("<IIIIIIII", UF2_MAGIC0, UF2_MAGIC1, flags,
+                           addr, size, i, total, family)
+        out += payload.ljust(476, b"\x00")
+        out += struct.pack("<I", UF2_MAGIC2)
+    return bytes(out)
+
+
+# --- verbs ------------------------------------------------------------------
+
+def cmd_list(_args):
+    for b in boards():
+        mark = "✓" if b["status"] == "supported" else " "
+        print(f"  {mark} {b['id']:<38} {b['name']}  ({b['soc']})")
+    print("\n  ✓ = built and published. Others: see docs/PORTING.md")
+
+
+def cmd_build(args):
+    b = find(args.board)
+    need_supported(b)
+    mode = args.mode or b["build"]["mode"]
+    run([f"./{b['build']['script']}", mode], cwd=REPO)
+
+
+def cmd_provision(args):
+    b = find(args.board)
+    need_supported(b)
+    ident = b.get("identity")
+    if not ident:
+        die(f"{b['name']} has no `identity.offset` in boards.yml, so a name cannot\n"
+            "  be written. Add it -- the address of its storage_partition.")
+
+    if not args.skip_build:
+        run([f"./{b['build']['script']}", b["build"]["mode"]], cwd=REPO)
+
+    artefacts = [REPO / a["from"] for a in b["provision"]]
+    for a in artefacts:
+        if not a.is_file():
+            die(f"expected {a.relative_to(REPO)} and it is not there.\n"
+                "  Drop --skip-build, or run `runtt-board build` first.")
+
+    work = pathlib.Path(tempfile.mkdtemp(prefix="runtt-provision-"))
+    record = work / "identity.bin"
+    make_identity(args.name, args.can_node_id, record)
+
+    method = b["program"]["method"]
+    offset = int(str(ident["offset"]), 0)
+
+    if method == "uf2":
+        # Append UF2 blocks for the identity record to the provisioning image, so
+        # ONE file carries bootloader, application and name. The alternative is
+        # asking the user to copy two files across in order, which is a step to
+        # get wrong for no benefit.
+        src = artefacts[0]
+        out = work / f"provision-{args.name}.uf2"
+        out.write_bytes(uf2_merge(src, record.read_bytes(), offset))
+        print(f"\n  {out}  ({out.stat().st_size} bytes)")
+        print(f"  = {src.name} plus an identity record at {offset:#x}")
+        if not args.no_flash:
+            flash_uf2(b, [out])
+        else:
+            print(f"\n  flash it with: {sys.argv[0]} flash {b['id']} {out}")
+    elif method == "swd":
+        print(f"\n  identity record: {record} -> {offset:#x}")
+        if not args.no_flash:
+            flash_swd(b, artefacts, extra=[(record, offset)])
+        else:
+            print(f"\n  flash it with: {sys.argv[0]} flash {b['id']}")
+            print(f"  then:          pyocd flash -t {b['program']['target']} "
+                  f"--base-address {offset:#x} {record}")
+    else:
+        die(f"unknown program.method {method!r} for {b['name']}")
+
+
+def flash_uf2(b, images):
+    label = b["program"]["volume_label"]
+    dev = pathlib.Path(f"/dev/disk/by-label/{label}")
+    if not dev.exists():
+        die(f"no {label} volume: the board is not in its ROM loader.\n"
+            f"  Hold BOOTSEL while plugging it in, then retry.\n"
+            f"  A board that failed a previous flash is usually already there --\n"
+            f"  check with: lsusb | grep {b['program']['bootsel_usb']}")
+    real = dev.resolve()
+    mount = subprocess.run(["findmnt", "-rn", "-o", "TARGET", str(real)],
+                           capture_output=True, text=True).stdout.strip()
+    mounted_here = False
+    if not mount:
+        run(["udisksctl", "mount", "-b", str(real)], stdout=subprocess.DEVNULL)
+        mount = subprocess.run(["findmnt", "-rn", "-o", "TARGET", str(real)],
+                               capture_output=True, text=True, check=True).stdout.strip()
+        mounted_here = True
+    try:
+        for img in images:
+            print(f"  copying {pathlib.Path(img).name} to {mount}")
+            shutil.copy2(img, mount)
+            subprocess.run(["sync"], check=True)
+    finally:
+        if mounted_here:
+            subprocess.run(["udisksctl", "unmount", "-b", str(real)],
+                           stdout=subprocess.DEVNULL, check=False)
+    print("  done. The board reboots itself out of BOOTSEL.")
+
+
+def flash_swd(b, images, extra=()):
+    target = b["program"]["target"]
+    if b["program"].get("backup"):
+        require_backup(b)
+    # Order matters and there must be no reset in between: MCUboot and the slot-0
+    # image are one logical write.
+    for img in images:
+        run(["pyocd", "flash", "-t", target, str(img)])
+    for img, addr in extra:
+        run(["pyocd", "flash", "-t", target, "--base-address", f"{addr:#x}", str(img)])
+    print("  done.")
+
+
+def require_backup(b):
+    """Refuse to flash without a verified backup. This erase destroys a
+    bootloader with no ROM loader behind it, so a truncated backup and no backup
+    fail the same way -- verify rather than merely finding one."""
+    for d in list(REPO.glob("*/")) + list(REPO.parent.glob("*/")):
+        if (d / "flash_full.bin").is_file() and (d / "uicr.bin").is_file():
+            sums = d / "BACKUP.sha256"
+            if sums.is_file():
+                r = subprocess.run(["sha256sum", "--quiet", "-c", sums.name],
+                                   cwd=d, capture_output=True)
+                if r.returncode != 0:
+                    die(f"{sums} does not match the files beside it. A truncated\n"
+                        "  backup restores to a brick as thoroughly as no backup.")
+                print(f"  backup: {d} (checksums verified)")
+            else:
+                print(f"  backup: {d} (no BACKUP.sha256 recorded)")
+            return
+    die(f"no backup found for {b['name']}: no directory beside or above this repo\n"
+        "  holds both flash_full.bin and uicr.bin.\n"
+        "  Take one first: ./scripts/backup-nrf52840.sh")
+
+
+def cmd_flash(args):
+    b = find(args.board)
+    need_supported(b)
+    images = [pathlib.Path(i) for i in args.images] or [REPO / a["from"] for a in b["provision"]]
+    for i in images:
+        if not i.is_file():
+            die(f"{i} is not a file. Build first: {sys.argv[0]} build {b['id']}")
+    if b["program"]["method"] == "uf2":
+        flash_uf2(b, images)
+    else:
+        flash_swd(b, images)
+
+
+def cmd_backup(args):
+    b = find(args.board)
+    if not b.get("program", {}).get("backup"):
+        die(f"{b['name']} needs no backup: it has a ROM loader, so a failed flash\n"
+            "  is recoverable without one.")
+    run(["./scripts/backup-nrf52840.sh"], cwd=REPO)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("list", help="every board in boards.yml").set_defaults(fn=cmd_list)
+
+    p = sub.add_parser("build", help="build a board's provisioning image")
+    p.add_argument("board"); p.add_argument("mode", nargs="?")
+    p.set_defaults(fn=cmd_build)
+
+    p = sub.add_parser("provision", help="build, name and flash a board")
+    p.add_argument("board")
+    p.add_argument("--name", required=True, help="board serial, e.g. arm-01")
+    p.add_argument("--can-node-id", help="base CAN id, e.g. 0x45")
+    p.add_argument("--skip-build", action="store_true", help="reuse an existing build")
+    p.add_argument("--no-flash", action="store_true", help="produce the image, do not write it")
+    p.set_defaults(fn=cmd_provision)
+
+    p = sub.add_parser("flash", help="write an image to a board")
+    p.add_argument("board"); p.add_argument("images", nargs="*")
+    p.set_defaults(fn=cmd_flash)
+
+    p = sub.add_parser("backup", help="back a board up before a destructive flash")
+    p.add_argument("board"); p.set_defaults(fn=cmd_backup)
+
+    args = ap.parse_args()
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -155,7 +155,7 @@ build_provision() {
   echo "  confirmed slot-0 image: $out"
   echo
   echo "  flash both, in this order, WITHOUT resetting in between:"
-  echo "    ./scripts/flash-feather.sh build-feather-idle"
+  echo "    ./scripts/runtt-board flash adafruit_feather_nrf52840"
   warn_dev_key build-feather-idle
 }
 
