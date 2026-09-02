@@ -4,10 +4,10 @@
 # Two configurations, because they prove different things:
 #
 #   provision  runtt-idle under sysbuild, emitted as a single UF2. This is
-             what a customer flashes over BOOTSEL to make a board manageable.
-             See docs/PROVISIONING.md.
-
-  bringup  plain `rpi_pico`. No bootloader, no slots, so no image management.
+#              what a customer flashes over BOOTSEL to make a board manageable.
+#              See docs/PROVISIONING.md.
+#
+#   bringup  plain `rpi_pico`. No bootloader, no slots, so no image management.
 #            Boots standalone, which is what you want while proving USB
 #            enumeration, the interface string descriptors and the udev rules.
 #            Flashable by drag-and-drop via BOOTSEL -- no probe required.
@@ -21,7 +21,15 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
 MODE="${1:-both}"
-export ZEPHYR_BASE="$REPO/zephyr"
+# The workspace, not the repo. `west init -l boards` puts zephyr/ and
+# modules/runtt/ beside this repository rather than inside it, so ZEPHYR_BASE
+# cannot be derived from $REPO. Ask west.
+TOPDIR="$(west topdir 2>/dev/null)" || {
+  echo "not in a west workspace. Set one up with:" >&2
+  echo "  mkdir ws && cd ws && git clone <this repo> boards && west init -l boards && west update" >&2
+  exit 1
+}
+export ZEPHYR_BASE="$TOPDIR/zephyr"
 export ZEPHYR_SDK_INSTALL_DIR="${ZEPHYR_SDK_INSTALL_DIR:-$HOME/zephyr-sdk}"
 unset ZEPHYR_TOOLCHAIN_VARIANT
 
@@ -66,6 +74,7 @@ build_mcuboot() {
   # See scripts/make-provision-uf2.py for why it is built from the hex files and
   # why the trailer matters.
   python3 scripts/make-provision-uf2.py \
+    --mcuboot "$TOPDIR/bootloader/mcuboot" \
     --zephyr-base "$ZEPHYR_BASE" \
     --objcopy "$ZEPHYR_SDK_INSTALL_DIR/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy"
   echo "    hold BOOTSEL, plug in, then:"
@@ -98,6 +107,7 @@ build_provision() {
        -Didle_SNIPPET=runtt
   echo
   python3 scripts/make-provision-uf2.py \
+    --mcuboot "$TOPDIR/bootloader/mcuboot" \
     --build-dir build-pico-idle \
     --zephyr-base "$ZEPHYR_BASE" \
     --objcopy "$ZEPHYR_SDK_INSTALL_DIR/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy" \

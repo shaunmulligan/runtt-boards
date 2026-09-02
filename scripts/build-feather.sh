@@ -23,7 +23,15 @@ cd "$REPO"
 
 MODE="${1:-mcuboot}"
 BOARD=adafruit_feather_nrf52840/nrf52840
-export ZEPHYR_BASE="$REPO/zephyr"
+# The workspace, not the repo. `west init -l boards` puts zephyr/ and
+# modules/runtt/ beside this repository rather than inside it, so ZEPHYR_BASE
+# cannot be derived from $REPO. Ask west.
+TOPDIR="$(west topdir 2>/dev/null)" || {
+  echo "not in a west workspace. Set one up with:" >&2
+  echo "  mkdir ws && cd ws && git clone <this repo> boards && west init -l boards && west update" >&2
+  exit 1
+}
+export ZEPHYR_BASE="$TOPDIR/zephyr"
 export ZEPHYR_SDK_INSTALL_DIR="${ZEPHYR_SDK_INSTALL_DIR:-$HOME/zephyr-sdk}"
 unset ZEPHYR_TOOLCHAIN_VARIANT
 
@@ -136,7 +144,7 @@ build_provision() {
   version=$(grep -oP '(?<=^VERSION_MAJOR = ).*' idle/VERSION 2>/dev/null || echo 0)
   out=build-feather-idle/provision-slot0.hex
 
-  python3 bootloader/mcuboot/scripts/imgtool.py sign \
+  python3 "$TOPDIR/bootloader/mcuboot/scripts/imgtool.py" sign \
     --key "$key" \
     --header-size 0x200 --align 4 \
     --version "${version}.0.0" --slot-size "$SLOT_SIZE" \

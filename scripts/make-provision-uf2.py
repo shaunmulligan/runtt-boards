@@ -62,11 +62,18 @@ def main() -> int:
     ap.add_argument("--image", default=None,
                     help="sysbuild image name (defaults to the sole non-mcuboot image)")
     ap.add_argument("--zephyr-base", default="zephyr")
-    ap.add_argument("--mcuboot", default="bootloader/mcuboot")
-    ap.add_argument("--key", default="bootloader/mcuboot/root-rsa-2048.pem")
+    # No usable default: MCUboot lives at the WEST WORKSPACE root, which is the
+    # parent of this repository, so any path relative to the CWD is wrong as
+    # often as it is right. Callers pass --mcuboot "$(west topdir)/bootloader/mcuboot".
+    ap.add_argument("--mcuboot", required=True,
+                    help="path to the mcuboot checkout, e.g. $(west topdir)/bootloader/mcuboot")
+    ap.add_argument("--key", default=None,
+                    help="signing key; defaults to <mcuboot>/root-rsa-2048.pem")
     ap.add_argument("--objcopy", required=True)
     ap.add_argument("-o", "--output", default=None)
     args = ap.parse_args()
+    if args.key is None:
+        args.key = str(pathlib.Path(args.mcuboot) / "root-rsa-2048.pem")
 
     build = pathlib.Path(args.build_dir)
     zbase = pathlib.Path(args.zephyr_base)
