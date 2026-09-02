@@ -24,8 +24,8 @@ the reasons. Read this before buying anything.
 |---|---|
 | `west.yml` | the Zephyr manifest: the exact pinned Zephyr, MCUboot and HALs |
 | `patches.yml`, `patches/` | carried upstream patches, applied by `west patch` and pinned by sha256 |
-| `app/` | the build vehicle the build scripts and provisioning docs use |
-| `idle/` | the placeholder that ships in slot 0 at provisioning time, so a fresh board **enumerates and reports itself** rather than looking dead |
+| `app/` | the **reference application**. Every board build compiles this, which is how a board proves it can build the full contract — and its `native_sim` binary *becomes* the fixture published for [`runtt`](https://github.com/shaunmulligan/runtt)'s gates. Not an example to copy; that is [`runtt-examples`](https://github.com/shaunmulligan/runtt-examples) |
+| `idle/` | the **provisioning payload**: the no-op application that ships in slot 0, so a fresh board enumerates and reports itself rather than looking dead. Only the `provision` build modes use it |
 | `bringup/`, `diag/` | configurations for proving one thing at a time when a board misbehaves |
 | `builder/` | a reusable Docker build environment, so an application directory needs a six-line Dockerfile |
 | `scripts/build-*.sh` | per-board builds: bring-up, MCUboot, provisioning images |
