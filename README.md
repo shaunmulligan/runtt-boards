@@ -9,11 +9,47 @@ there is the one act that needs physical access, and this repository is how.
 
 Everything after provisioning is remote. This is the step you do once per board.
 
-## Supported devices — download and flash
+## Provision a board
+
+**One script, no toolchain.** It downloads the right image for your board, writes
+the name you give it into flash, and flashes the result:
+
+```bash
+curl -fLO https://raw.githubusercontent.com/shaunmulligan/runtt-boards/main/scripts/runtt-board
+chmod +x runtt-board
+
+./runtt-board list
+./runtt-board provision rpi_pico --name pico-01
+```
+
+That is the whole thing. No repository to clone, no Zephyr, no 2 GB SDK — it
+fetches the published image, verifies it against `SHA256SUMS`, and refuses to
+flash a download that does not match.
+
+The **name** matters more than it looks. It becomes the board's USB serial and
+its identity in flash, so `runtt` can address it as `usb:pico-01` wherever it is
+plugged in, rather than by which port it happens to occupy. Add
+`--can-node-id 0x45` for a board on a CAN bus.
+
+```bash
+./runtt-board provision adafruit_feather_nrf52840 --name arm-01 --can-node-id 0x45
+./runtt-board provision rpi_pico --name pico-02 --release v0.1.0   # pin a release
+./runtt-board provision rpi_pico --name pico-03 --build            # build locally
+```
+
+`--build` is for developing or porting, and is the only mode that needs a west
+workspace. Everything else works from the single file.
+
+## Or download the image yourself
 
 Flash one of these **once per board**. After that every update is remote: the
 board becomes a container image you deploy with
 [runtt](https://github.com/shaunmulligan/runtt).
+
+Doing it this way leaves the board **unnamed** — it will publish a
+hardware-derived serial and, on CAN, use the built-in default node id. That is
+fine for one board and a collision waiting to happen for two, so prefer
+`runtt-board provision` above unless you have a reason not to.
 
 <!-- BEGIN GENERATED: supported devices (scripts/boards.py) -->
 

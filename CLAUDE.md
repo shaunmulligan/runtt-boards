@@ -32,6 +32,19 @@ came from scripts assuming `$REPO/zephyr` — correct in the monorepo this was
 extracted from, wrong now, and the resulting CMake error (`Unknown CMake command
 "zephyr_get"`) says nothing about the cause.
 
+## Provisioning downloads by default
+
+`scripts/runtt-board provision <board> --name X` fetches the published image,
+writes an identity record into it and flashes it. It works as a **single
+downloaded file** — no checkout, no west workspace, no Zephyr — because the person
+provisioning a board wants to flash it, not to install a toolchain. Anything it
+needs and cannot find beside itself it fetches, and it verifies every download
+against `SHA256SUMS` before writing a board.
+
+`--build` opts into a local build and is the only mode needing a workspace. Keep
+it that way: if a change makes the default path require a checkout, the tool has
+stopped serving its main user.
+
 ## Building
 
 ```bash

@@ -129,6 +129,21 @@ been flashed to real hardware and a deploy confirmed**.
 ./scripts/boards.py --check-readme    # what CI runs
 ```
 
+A new board must also work through the single-file path, not only from a
+checkout. Once a release carries its images, this has to succeed in an empty
+directory with nothing but the script:
+
+```bash
+./runtt-board provision <board> --name test-01 --no-flash
+```
+
+That means `program` and `identity` entries in boards.yml, because the downloaded
+script has no other way to know the board's flash method or its
+storage-partition offset. For a UF2 board the offset is the **XIP-mapped**
+address, not the flash offset — the RP2040's storage partition is at `0x1b0000`
+but appears at `0x101b0000`, and the unmapped value writes nowhere and silently
+does nothing.
+
 Never hand-edit the generated README block, and never add assets to the workflow
 directly. If you are editing `.github/workflows/ci.yml` to add a board, something
 has gone wrong.
