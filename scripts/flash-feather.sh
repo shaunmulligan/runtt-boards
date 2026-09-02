@@ -31,8 +31,38 @@ SLOT0_HEX="$BUILD_DIR/provision-slot0.hex"
 [[ -f "$SLOT0_HEX" ]] || die "missing $SLOT0_HEX -- run ./scripts/build-feather.sh provision"
 
 # Refuse to be the reason a board is unrecoverable.
-if ! compgen -G "nrf52840-backup-*" >/dev/null && ! compgen -G "../nrf52840-backup-*" >/dev/null; then
-  echo "!! No nrf52840-backup-* directory found."
+#
+# Look for the FILES a restore actually needs, not for a directory name. The
+# previous version globbed `nrf52840-backup-*`, which is what backup-nrf52840.sh
+# defaults to -- but the script takes an optional output directory, so a backup
+# taken as `./scripts/backup-nrf52840.sh feather-backup` was invisible to this
+# guard. A safety check that silently fails to see a real backup is worse than no
+# check, because it teaches you to pass --yes.
+find_backup() {
+  local d
+  for d in "$REPO"/*/ "$REPO"/../*/; do
+    [[ -f "$d/flash_full.bin" && -f "$d/uicr.bin" ]] && { echo "${d%/}"; return 0; }
+  done
+  return 1
+}
+
+if BACKUP_DIR="$(find_backup)"; then
+  echo "  backup:    $BACKUP_DIR (flash_full.bin + uicr.bin)"
+  if [[ -f "$BACKUP_DIR/BACKUP.sha256" ]]; then
+    # Verify it rather than trusting its presence: a truncated backup restores
+    # to a brick just as thoroughly as no backup at all.
+    if ( cd "$BACKUP_DIR" && sha256sum --quiet -c BACKUP.sha256 ) 2>/dev/null; then
+      echo "  checksums: verified"
+    else
+      echo "!! $BACKUP_DIR/BACKUP.sha256 does NOT match the files beside it."
+      $ASSUME_YES || die "refusing to flash against a backup that fails its own checksum"
+    fi
+  else
+    echo "  checksums: none recorded (no BACKUP.sha256)"
+  fi
+else
+  echo "!! No backup found: no directory beside or above the repo holds both"
+  echo "   flash_full.bin and uicr.bin."
   echo "   This erase destroys the Adafruit UF2 bootloader and its UICR settings."
   echo "   Take a backup first:  ./scripts/backup-nrf52840.sh"
   echo

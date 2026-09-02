@@ -306,6 +306,11 @@ done
 
 echo
 echo "Re-run with --check at any time to re-verify."
-echo "Remaining hardware steps, which are deliberately not automated, are in"
-echo "docs/PREREQUISITES.md — notably backing up the Feather before its"
-echo "bootloader is replaced."
+# Point at docs that actually ship. docs/PREREQUISITES.md is a local working
+# note and is gitignored, so on a fresh clone this named a file that was not
+# there.
+echo "Remaining hardware steps, which are deliberately not automated:"
+echo "  docs/PROVISIONING.md     - getting a board manageable in the first place,"
+echo "                             including backing up the Feather BEFORE its"
+echo "                             bootloader is replaced"
+echo "  docs/HARDWARE_TARGETS.md - which boards are supported and what each needs"
