@@ -1,6 +1,6 @@
 # runtt-boards
 
-**Getting a board to the point where [runtt](https://github.com/<org>/runtt) can
+**Getting a board to the point where [runtt](https://github.com/shaunmulligan/runtt) can
 manage it** — and keeping it that way.
 
 runtt deploys firmware to a microcontroller as an ordinary container image. That
@@ -47,7 +47,7 @@ firmware"*. Those two states look identical otherwise and want opposite reaction
 
 * **Provisioning images** per supported board — MCUboot plus a signed idle
   application, as one contiguous region ready to flash.
-* **`native_sim` firmware fixtures**, which [`runtt`](https://github.com/<org>/runtt)'s
+* **`native_sim` firmware fixtures**, which [`runtt`](https://github.com/shaunmulligan/runtt)'s
   end-to-end gates consume. The runtime's tests need a firmware *binary*, not
   firmware source, so it pins a release from here rather than building Zephyr.
 
@@ -55,14 +55,14 @@ firmware"*. Those two states look identical otherwise and want opposite reaction
 
 | Repo | What it holds | Start here if |
 |---|---|---|
-| [`runtt`](https://github.com/<org>/runtt) | the OCI runtime — the **host** side | you want to know what runtt is, or to work on the runtime |
-| [`runtt-zephyr-module`](https://github.com/<org>/runtt-zephyr-module) | the Zephyr module — the **device** side | you have firmware and want it manageable |
-| [`runtt-boards`](https://github.com/<org>/runtt-boards) | provisioning, board bring-up, the west manifest | you have a board that has never run runtt |
-| [`runtt-examples`](https://github.com/<org>/runtt-examples) | two worked applications, and the walkthrough | you want to watch it work end to end |
+| [`runtt`](https://github.com/shaunmulligan/runtt) | the OCI runtime — the **host** side | you want to know what runtt is, or to work on the runtime |
+| [`runtt-zephyr-module`](https://github.com/shaunmulligan/runtt-zephyr-module) | the Zephyr module — the **device** side | you have firmware and want it manageable |
+| [`runtt-boards`](https://github.com/shaunmulligan/runtt-boards) | provisioning, board bring-up, the west manifest | you have a board that has never run runtt |
+| [`runtt-examples`](https://github.com/shaunmulligan/runtt-examples) | two worked applications, and the walkthrough | you want to watch it work end to end |
 
-**New here?** Read [`runtt`](https://github.com/<org>/runtt)’s README for what this
+**New here?** Read [`runtt`](https://github.com/shaunmulligan/runtt)’s README for what this
 is and why, then follow the walkthrough in
-[`runtt-examples`](https://github.com/<org>/runtt-examples).
+[`runtt-examples`](https://github.com/shaunmulligan/runtt-examples).
 
 ## Licence
 
