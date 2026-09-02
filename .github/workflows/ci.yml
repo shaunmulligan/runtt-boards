@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  # Provisioning images are cut from tags, and a release is what the docs point
+  # at, so the tag is the trigger rather than a manual dispatch.
+
+permissions:
+  contents: write        # only the release job needs this; see its own note
+
+env:
+  # The upstream CI image is PUBLIC on Docker Hub, so pulling it is free on any
+  # plan. Publishing our own derived image was the obvious alternative and is a
+  # trap: it is ~33 GB, while private GitHub Packages on the Free plan allow
+  # 500 MB shared with Actions artifacts. Our own layers are only 1.12 GB of west
+  # workspace, so caching that instead costs nothing and needs no registry.
+  ZEPHYR_SDK_INSTALL_DIR: /opt/toolchains/zephyr-sdk-1.0.1
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Everything Zephyr in ONE job, deliberately.
+  #
+  # A matrix over boards would parallelise, but each leg pays ~1 GB of cache
+  # restore before it can build, and billed minutes are what the Free plan meters
+  # (2,000/month for private repos; unlimited once public). Sequential steps give
+  # the same failure attribution through step names at roughly a third of the
+  # billed time. Revisit if the board list grows past four or the repo goes
+  # public.
+  # ---------------------------------------------------------------------------
+  firmware:
+    runs-on: ubuntu-24.04
+    container: zephyrprojectrtos/ci:v0.29.3
+    steps:
+      - name: Check out this repo as the manifest repo
+        uses: actions/checkout@v4
+        with:
+          path: boards          # must match `self.path` in west.yml
+
+      # Cache the west workspace, not the toolchain: the toolchain is in the
+      # container. Keyed on the manifest, since that is what decides the
+      # contents. The module is a branch revision, so the key alone cannot know
+      # it moved -- `west update` below runs regardless and is a no-op when the
+      # cache is warm and the revision unchanged.
+      - name: Restore the west workspace
+        id: ws
+        uses: actions/cache@v4
+        with:
+          path: |
+            zephyr
+            modules
+            bootloader
+            .west
+          key: west-${{ hashFiles('boards/west.yml') }}
+
+      - name: Assemble the workspace
+        run: |
+          west init -l boards 2>/dev/null || echo "already initialised"
+          west update --narrow -o=--depth=1
+          west list
+
+      # native_sim needs no SDK and is the fixture the runtime's gates consume,
+      # so it comes first: if this breaks, runtt's CI is about to break too.
+      - name: Build native_sim
+        working-directory: boards
+        run: ./scripts/build-native-sim.sh
+
+      - name: Build native_sim with CAN
+        working-directory: boards
+        env:
+          BUILD_DIR: ${{ github.workspace }}/boards/build-can
+        run: |
+          ./scripts/build-native-sim.sh \
+            -DEXTRA_CONF_FILE="$PWD/bringup/native-sim-can.conf" \
+            -DEXTRA_DTC_OVERLAY_FILE="$PWD/bringup/native-sim-can.overlay"
+
+      - name: The module's contract assertion
+        run: ./modules/runtt/tests/contract_version.sh
+
+      - name: Build for the Pico (RP2040), full contract
+        working-directory: boards
+        run: ./scripts/build-pico.sh mcuboot
+
+      - name: Build for the Feather (nRF52840), full contract
+        working-directory: boards
+        run: ./scripts/build-feather.sh mcuboot
+
+      # --- the deliverables ---------------------------------------------------
+      - name: Provisioning image, Pico
+        working-directory: boards
+        run: ./scripts/build-pico.sh provision
+
+      - name: Provisioning image, Feather
+        working-directory: boards
+        run: ./scripts/build-feather.sh provision
+
+      - name: Collect artefacts
+        working-directory: boards
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          # Provisioning images, one set per supported device.
+          cp build-pico-idle/provision.uf2        out/provision-rpi_pico.uf2
+          cp build-feather-idle/provision-slot0.hex out/provision-adafruit_feather_nrf52840-slot0.hex
+          cp build-feather-idle/mcuboot/zephyr/zephyr.hex \
+             out/provision-adafruit_feather_nrf52840-mcuboot.hex
+          # Fixtures the runtime's end-to-end gates consume. They need a firmware
+          # BINARY, not firmware source, which is why they can live in another
+          # repository at all.
+          cp build/zephyr/zephyr.exe      out/native_sim-runtt.exe
+          cp build-can/zephyr/zephyr.exe  out/native_sim-runtt-can.exe
+          ( cd out && sha256sum * > SHA256SUMS )
+          ls -la out
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtt-boards-artefacts
+          path: boards/out/
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Scripts are most of this repository, so lint them. Seconds, no container.
+  # ---------------------------------------------------------------------------
+  shellcheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # SC1091: sourced files that only exist at runtime.
+          shellcheck --severity=warning --exclude=SC1091 scripts/*.sh tests/*.sh 2>/dev/null || \
+          shellcheck --severity=warning --exclude=SC1091 scripts/*.sh
+
+  # ---------------------------------------------------------------------------
+  # On a tag: attach the provisioning images and fixtures to a GitHub release.
+  #
+  # This is what the docs should point people at -- "flash this file" beats
+  # "install a Zephyr toolchain and build it yourself" for the one step that
+  # needs physical access to a board.
+  # ---------------------------------------------------------------------------
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [firmware, shellcheck]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: runtt-boards-artefacts
+          path: out
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ls -la out
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Provisioning images and \`native_sim\` fixtures built from \`${GITHUB_SHA}\`.
+
+          **Provisioning images** — flash once per board, then everything is remote.
+
+          | File | Board | How |
+          |---|---|---|
+          | \`provision-rpi_pico.uf2\` | Raspberry Pi Pico | hold BOOTSEL, plug in, copy the file across. No probe needed |
+          | \`provision-adafruit_feather_nrf52840-mcuboot.hex\` + \`-slot0.hex\` | Adafruit Feather nRF52840 | SWD, and **back the board up first** — this erases the Adafruit bootloader |
+
+          **Fixtures** — \`native_sim-runtt.exe\` and \`native_sim-runtt-can.exe\` are
+          what [runtt](https://github.com/shaunmulligan/runtt)'s end-to-end gates
+          consume, so that repository needs no Zephyr toolchain.
+
+          Signed with MCUboot's **published development key**: no trust root is
+          enrolled and these images are for benches, not fleets." \
+            out/* || gh release upload "${GITHUB_REF_NAME}" out/* --clobber
