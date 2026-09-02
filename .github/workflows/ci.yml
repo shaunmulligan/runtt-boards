@@ -172,15 +172,22 @@ jobs:
         working-directory: boards
         run: |
           set -euo pipefail
-          mkdir -p out
-          cp build-pico-idle/provision.uf2          out/provision-rpi_pico.uf2
-          cp build-feather-idle/provision-slot0.hex out/provision-adafruit_feather_nrf52840-slot0.hex
-          cp build-feather-idle/mcuboot/zephyr/zephyr.hex \
-             out/provision-adafruit_feather_nrf52840-mcuboot.hex
+          # Driven by boards.yml, NOT a list of cp lines. This used to hardcode
+          # one cp per asset, and the failure mode is quiet: promoting a board to
+          # `supported` made CI build it and then publish nothing, because the
+          # asset it declares was never copied. `--collect` reads the same
+          # provision entries the README table and release notes come from, so
+          # adding a board stays a one-file change.
+          ./scripts/boards.py --collect out
           # Fixtures for runtt's end-to-end gates. Its tests need a firmware
           # BINARY, not firmware source, which is what lets that repo carry no
           # Zephyr toolchain at all.
-          ( cd out && sha256sum * > SHA256SUMS )
+          # No sha256sum here: --collect already wrote SHA256SUMS. Running it
+          # again would be actively wrong -- the `> SHA256SUMS` redirect
+          # truncates the file before sha256sum reads the directory, so
+          # SHA256SUMS would be listed with the hash of an empty file and
+          # `sha256sum -c SHA256SUMS` would fail on that line for every user who
+          # checked their download.
           ls -la out
           # native_sim binaries are NOT release assets. A release is what a user
           # lands on to flash a board, and two host executables they have no use

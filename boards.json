@@ -31,7 +31,7 @@
       "id": "rpi_pico2/rp2350a/m33/w/mcuboot",
       "name": "Raspberry Pi Pico 2 W",
       "soc": "RP2350",
-      "status": "in-progress",
+      "status": "supported",
       "build": {
         "script": "scripts/build-pico2w.sh",
         "mode": "provision"

@@ -56,6 +56,7 @@ fine for one board and a collision waiting to happen for two, so prefer
 | Board | Download | Probe needed? | How |
 |---|---|---|---|
 | **Raspberry Pi Pico** (RP2040) | [`provision-rpi_pico.uf2`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-rpi_pico.uf2) | **No** | Hold BOOTSEL, plug in, copy the file onto the drive that appears. Unbrickable — the RP2040 mask ROM always gives you BOOTSEL back |
+| **Raspberry Pi Pico 2 W** (RP2350) | [`provision-rpi_pico2w.uf2`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-rpi_pico2w.uf2) | **No** | Hold BOOTSEL, plug in, copy the file onto the drive that appears. Unbrickable — the RP2350 boot ROM always gives BOOTSEL back. MCUboot uses 53% of the 64K boot slot, against RP2040's tighter 63.5K (RP2350 needs no 256-byte second-stage bootloader). For bring-up over SWD, pyocd needs -O connect_mode=under-reset: RP2350's flash routines live in ROM and require the core in secure state, and the first connect otherwise fails with "Unable to set target to secure mode". |
 | **Adafruit Feather nRF52840** (nRF52840) | [`provision-adafruit_feather_nrf52840-mcuboot.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-mcuboot.hex) + [`provision-adafruit_feather_nrf52840-slot0.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-slot0.hex) | Yes, SWD | SWD, both files in order without resetting in between. **Back the board up first — this erases the Adafruit UF2 bootloader and its UICR settings, and there is no ROM loader to fall back on**  |
 
 Check what you downloaded against [`SHA256SUMS`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/SHA256SUMS). Those
@@ -64,7 +65,6 @@ available.
 
 **Being brought up**, not yet published:
 
-* **Raspberry Pi Pico 2 W** (RP2350) — Unbrickable — the RP2350 boot ROM always gives BOOTSEL back. MCUboot uses 53% of the 64K boot slot, against RP2040's tighter 63.5K (RP2350 needs no 256-byte second-stage bootloader). For bring-up over SWD, pyocd needs -O connect_mode=under-reset: RP2350's flash routines live in ROM and require the core in secure state, and the first connect otherwise fails with "Unable to set target to secure mode".
 * **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen — see docs/HARDWARE_TARGETS.md
 * **Adafruit RP2040 CAN Bus Feather** (RP2040 + MCP25625) — Hardware on order. Zephyr has the board and `zephyr,canbus` is already chosen, but it ships no MCUboot slots, so a partition variant needs writing
 

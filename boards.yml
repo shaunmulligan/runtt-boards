@@ -59,20 +59,19 @@ boards:
     identity:
       offset: 0x101b0000
 
-  # Bring-up in progress. FIVE of the six checks in docs/PORTING.md pass on real
-  # hardware: describe reports the board and 2 channels; a deploy uploads, swaps
-  # and confirms; logs reach container stdio; a deliberately unmanageable image
+  # All six checks in docs/PORTING.md pass on real hardware (2026-09-02):
+  # describe reports the board and 2 channels; a deploy uploads, swaps and
+  # confirms; logs reach container stdio; a deliberately unmanageable image
   # (CONFIG_MCUMGR_TRANSPORT_UART=n -- it boots, it just cannot be talked to)
-  # fails to confirm and MCUboot reverts; and the provisioning image flashed by
-  # BOOTSEL drag-and-drop enumerates and reports itself freshly provisioned.
+  # fails to confirm and MCUboot reverts; the provisioning image flashed by
+  # BOOTSEL drag-and-drop enumerates and reports itself freshly provisioned; and
+  # unplugging exits non-zero ("lost contact with the device after 2
+  # heartbeats"), so a restart policy fires.
   #
-  # The sixth is unmet: unplugging must exit non-zero so a restart policy fires.
-  # It needs someone at the bench. Halting the core over SWD is NOT a substitute
-  # and was tried -- RP2350's USB device controller keeps answering the host in
-  # hardware, so the device stays enumerated with the CPU stopped.
-  #
-  # Not promoted to `supported` until that passes. A half-checked port is worse
-  # than none, because someone will trust it.
+  # One note for whoever tests the unplug case again: halting the core over SWD
+  # is NOT a substitute, and was tried. RP2350's USB device controller goes on
+  # answering the host in hardware, so the device stays enumerated with the CPU
+  # stopped and the runtime sees nothing wrong.
   #
   # Needs no new snippet files at all. The module's `/rpi_pico.*/` board regex
   # already matches (Zephyr anchors it against "$BOARD/$BOARD_QUALIFIERS"), and
@@ -82,7 +81,7 @@ boards:
   - id: rpi_pico2/rp2350a/m33/w/mcuboot
     name: Raspberry Pi Pico 2 W
     soc: RP2350
-    status: in-progress
+    status: supported
     build:
       script: scripts/build-pico2w.sh
       mode: provision
