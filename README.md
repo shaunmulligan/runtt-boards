@@ -64,6 +64,7 @@ available.
 
 **Being brought up**, not yet published:
 
+* **Raspberry Pi Pico 2 W** (RP2350) — Unbrickable — the RP2350 boot ROM always gives BOOTSEL back. MCUboot uses 53% of the 64K boot slot, against RP2040's tighter 63.5K (RP2350 needs no 256-byte second-stage bootloader). For bring-up over SWD, pyocd needs -O connect_mode=under-reset: RP2350's flash routines live in ROM and require the core in secure state, and the first connect otherwise fails with "Unable to set target to secure mode".
 * **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen — see docs/HARDWARE_TARGETS.md
 * **Adafruit RP2040 CAN Bus Feather** (RP2040 + MCP25625) — Hardware on order. Zephyr has the board and `zephyr,canbus` is already chosen, but it ships no MCUboot slots, so a partition variant needs writing
 

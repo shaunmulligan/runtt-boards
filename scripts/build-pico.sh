@@ -21,6 +21,25 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
 MODE="${1:-both}"
+
+# ---------------------------------------------------------------------------
+# Per-SoC values. The defaults are the Pico 1 (RP2040); scripts/build-pico2w.sh
+# overrides them for the Pico 2 W (RP2350). One implementation rather than two
+# copies, because the two boards differ in remarkably little: slot0, slot1 and
+# the storage partition sit at identical offsets, so only the board targets, the
+# boot-slot size and the UF2 family id change.
+#
+# BOOT_SLOT is the size of boot_partition, and it genuinely differs: RP2040
+# spends the first 256 bytes on a second-stage bootloader and leaves MCUboot
+# 0xfe00 (63.5 K), while RP2350's boot ROM reads flash directly and MCUboot gets
+# the full 0x10000 (64 K).
+# ---------------------------------------------------------------------------
+BOARD_BRINGUP="${BOARD_BRINGUP:-rpi_pico}"
+BOARD_MCUBOOT="${BOARD_MCUBOOT:-rpi_pico/rp2040/mcuboot}"
+DIRP="${DIRP:-build-pico}"          # build-directory prefix
+UF2_FAMILY="${UF2_FAMILY:-RP2040}"
+BOOT_SLOT="${BOOT_SLOT:-0xfe00}"
+VOLUME="${VOLUME:-RPI-RP2}"         # BOOTSEL mass-storage label
 # The workspace, not the repo. `west init -l boards` puts zephyr/ and
 # modules/runtt/ beside this repository rather than inside it, so ZEPHYR_BASE
 # cannot be derived from $REPO. Ask west.
@@ -40,26 +59,26 @@ unset ZEPHYR_TOOLCHAIN_VARIANT
 }
 
 build_bringup() {
-  echo "=== bringup: plain rpi_pico (no bootloader, no image management) ==="
-  west build -p always -b rpi_pico --snippet runtt app-test \
-    -d build-pico
+  echo "=== bringup: plain $BOARD_BRINGUP (no bootloader, no image management) ==="
+  west build -p always -b "$BOARD_BRINGUP" --snippet runtt app-test \
+    -d "$DIRP"
   echo
   echo "  flash by drag-and-drop: hold BOOTSEL, plug in, then"
-  echo "    cp build-pico/zephyr/zephyr.uf2 /media/\$USER/RPI-RP2/"
+  echo "    cp $DIRP/zephyr/zephyr.uf2 /media/\$USER/$VOLUME/"
 }
 
 build_mcuboot() {
-  echo "=== mcuboot: rpi_pico/rp2040/mcuboot under sysbuild (full contract) ==="
+  echo "=== mcuboot: $BOARD_MCUBOOT under sysbuild (full contract) ==="
   # -Dapp-test_SNIPPET rather than --snippet. With sysbuild, --snippet applies the
   # snippet to EVERY image, which would enable MCUmgr, our module and a dual CDC
   # composite inside the bootloader.
-  west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild app-test \
-    -d build-pico-mcuboot -- \
+  west build -p always -b "$BOARD_MCUBOOT" --sysbuild app-test \
+    -d "$DIRP-mcuboot" -- \
        -Dapp-test_SNIPPET=runtt
 
-  local boot_bin=build-pico-mcuboot/mcuboot/zephyr/zephyr.bin
-  local signed=build-pico-mcuboot/app-test/zephyr/zephyr.signed.bin
-  local slot=$((0xfe00))
+  local boot_bin="$DIRP-mcuboot/mcuboot/zephyr/zephyr.bin"
+  local signed="$DIRP-mcuboot/app-test/zephyr/zephyr.signed.bin"
+  local slot=$((BOOT_SLOT))
 
   echo
   if [[ -f "$boot_bin" ]]; then
@@ -75,15 +94,16 @@ build_mcuboot() {
   # why the trailer matters.
   python3 scripts/make-provision-uf2.py \
     --mcuboot "$TOPDIR/bootloader/mcuboot" \
-    --build-dir build-pico-mcuboot \
+    --build-dir "$DIRP-mcuboot" \
     --zephyr-base "$ZEPHYR_BASE" \
     --objcopy "$ZEPHYR_SDK_INSTALL_DIR/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy" \
-    -o build-pico-mcuboot/provision.uf2
+    --family "$UF2_FAMILY" \
+    -o "$DIRP-mcuboot/provision.uf2"
   echo "    hold BOOTSEL, plug in, then:"
-  echo "      cp build-pico-mcuboot/provision.uf2 \"\$(findmnt -rn -o TARGET /dev/sda1)/\""
+  echo "      cp $DIRP-mcuboot/provision.uf2 \"\$(findmnt -rn -o TARGET /dev/sda1)/\""
   echo
 
-  warn_dev_key build-pico-mcuboot
+  warn_dev_key "$DIRP-mcuboot"
 }
 
 # Loud, every build: an image signed with a publicly known private key is not
@@ -104,20 +124,21 @@ warn_dev_key() {
 
 build_provision() {
   echo "=== provision: runtt-idle + MCUboot, one flashable image ==="
-  west build -p always -b rpi_pico/rp2040/mcuboot --sysbuild idle \
-    -d build-pico-idle -- \
+  west build -p always -b "$BOARD_MCUBOOT" --sysbuild idle \
+    -d "$DIRP-idle" -- \
        -Didle_SNIPPET=runtt
   echo
   python3 scripts/make-provision-uf2.py \
     --mcuboot "$TOPDIR/bootloader/mcuboot" \
-    --build-dir build-pico-idle \
+    --build-dir "$DIRP-idle" \
     --zephyr-base "$ZEPHYR_BASE" \
     --objcopy "$ZEPHYR_SDK_INSTALL_DIR/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objcopy" \
-    -o build-pico-idle/provision.uf2
+    --family "$UF2_FAMILY" \
+    -o "$DIRP-idle/provision.uf2"
   echo
-  echo "  flash it with:  ./scripts/runtt-board flash rpi_pico"
+  echo "  flash it with:  ./scripts/runtt-board flash $BOARD_MCUBOOT"
   echo "  (hold BOOTSEL while plugging the board in first)"
-  warn_dev_key build-pico-idle
+  warn_dev_key "$DIRP-idle"
 }
 
 case "$MODE" in
