@@ -9,14 +9,32 @@ there is the one act that needs physical access, and this repository is how.
 
 Everything after provisioning is remote. This is the step you do once per board.
 
-## Start here
+## Supported devices — download and flash
 
-**[docs/PROVISIONING.md](docs/PROVISIONING.md)** — the provisioning flow, per
-board, including the parts that are irreversible and how not to lose a bootloader.
+Flash one of these **once per board**. After that every update is remote: the
+board becomes a container image you deploy with
+[runtt](https://github.com/shaunmulligan/runtt).
 
-**[docs/HARDWARE_TARGETS.md](docs/HARDWARE_TARGETS.md)** — which boards are
-supported, what each one still needs, and the boards deliberately rejected with
-the reasons. Read this before buying anything.
+| Board | Download | Probe needed? | How |
+|---|---|---|---|
+| **Raspberry Pi Pico** (RP2040) | [`provision-rpi_pico.uf2`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-rpi_pico.uf2) | **No** | Hold BOOTSEL, plug in, copy the file onto the drive that appears |
+| **Adafruit Feather nRF52840** | [`…-mcuboot.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-mcuboot.hex) + [`…-slot0.hex`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/provision-adafruit_feather_nrf52840-slot0.hex) | Yes, SWD | [`docs/PROVISIONING.md`](docs/PROVISIONING.md) — **back the board up first**, this erases the Adafruit bootloader |
+
+Check what you downloaded against [`SHA256SUMS`](https://github.com/shaunmulligan/runtt-boards/releases/latest/download/SHA256SUMS). Those links
+always resolve to the newest release; [older
+releases](https://github.com/shaunmulligan/runtt-boards/releases) stay available.
+
+⚠️ **These images are signed with MCUboot's published development key**, so no
+trust root is enrolled and an image signature proves nothing. That is fine on a
+bench and unfit for a fleet — generate your own key first, and note that on the
+Feather the public half is baked into MCUboot, so rotating it means another SWD
+flash.
+
+### Boards not on this list
+
+[`docs/HARDWARE_TARGETS.md`](docs/HARDWARE_TARGETS.md) covers what is coming, what
+each board still needs, and the boards deliberately rejected with the reasons.
+Read it before buying anything.
 
 ## What is here
 
@@ -70,9 +88,9 @@ firmware"*. Those two states look identical otherwise and want opposite reaction
 
 * **Provisioning images** per supported board — MCUboot plus a signed idle
   application, as one contiguous region ready to flash.
-* **`native_sim` firmware fixtures**, which [`runtt`](https://github.com/shaunmulligan/runtt)'s
-  end-to-end gates consume. The runtime's tests need a firmware *binary*, not
-  firmware source, so it pins a release from here rather than building Zephyr.
+* **`native_sim` firmware fixtures** — as build *artefacts*, not release assets.
+  They are host executables that only a CI job or someone debugging a run has any
+  use for, and a release page is where a user goes to flash a board.
 
 ## The runtt repositories
 

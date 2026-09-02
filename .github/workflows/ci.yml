@@ -128,16 +128,29 @@ jobs:
           # Fixtures for runtt's end-to-end gates. Its tests need a firmware
           # BINARY, not firmware source, which is what lets that repo carry no
           # Zephyr toolchain at all.
-          cp build/zephyr/zephyr.exe      out/native_sim-runtt.exe
-          cp build-can/zephyr/zephyr.exe  out/native_sim-runtt-can.exe
           ( cd out && sha256sum * > SHA256SUMS )
           ls -la out
+          # native_sim binaries are NOT release assets. A release is what a user
+          # lands on to flash a board, and two host executables they have no use
+          # for is noise on that page. They go up as build artefacts, where
+          # anyone debugging a run can still get them.
+          mkdir -p fixtures
+          cp build/zephyr/zephyr.exe      fixtures/native_sim-runtt.exe
+          cp build-can/zephyr/zephyr.exe  fixtures/native_sim-runtt-can.exe
+          ( cd fixtures && sha256sum * > SHA256SUMS )
 
-      - name: Upload artefacts
+      - name: Upload provisioning images
         uses: actions/upload-artifact@v4
         with:
-          name: runtt-boards-artefacts
+          name: provisioning-images
           path: boards/out/
+          retention-days: 14
+
+      - name: Upload native_sim fixtures
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-sim-fixtures
+          path: boards/fixtures/
           retention-days: 14
 
   shellcheck:
@@ -155,7 +168,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: runtt-boards-artefacts
+          name: provisioning-images
           path: out
 
       - name: Attach to the release
@@ -167,19 +180,21 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Provisioning images and \`native_sim\` fixtures built from \`${GITHUB_SHA}\`.
+            --notes "Provisioning images for every supported board, built from \`${GITHUB_SHA}\`.
 
-          **Provisioning images** — flash once per board, then everything is remote.
+          **Flash one of these once per board.** After that every update is remote:
+          the board becomes a container image you deploy with
+          [runtt](https://github.com/shaunmulligan/runtt).
 
-          | File | Board | How |
+          | Board | Download | How to flash |
           |---|---|---|
-          | \`provision-rpi_pico.uf2\` | Raspberry Pi Pico | hold BOOTSEL, plug in, copy the file across. No probe needed |
-          | \`provision-adafruit_feather_nrf52840-mcuboot.hex\` + \`-slot0.hex\` | Adafruit Feather nRF52840 | SWD, and **back the board up first** — this erases the Adafruit bootloader |
+          | **Raspberry Pi Pico** (RP2040) | \`provision-rpi_pico.uf2\` | Hold BOOTSEL, plug in, copy the file onto the drive that appears. **No debug probe needed.** |
+          | **Adafruit Feather nRF52840** | \`provision-adafruit_feather_nrf52840-mcuboot.hex\` and \`provision-adafruit_feather_nrf52840-slot0.hex\` | Needs SWD. **Back the board up first** — this erases the Adafruit bootloader. See [PROVISIONING.md](https://github.com/shaunmulligan/runtt-boards/blob/main/docs/PROVISIONING.md) |
 
-          **Fixtures** — \`native_sim-runtt.exe\` and \`native_sim-runtt-can.exe\` are what
-          [runtt](https://github.com/shaunmulligan/runtt)'s end-to-end gates consume,
-          so that repository needs no Zephyr toolchain.
+          Verify what you downloaded against \`SHA256SUMS\`.
 
-          Signed with MCUboot's **published development key**: no trust root is
-          enrolled, so these images are for benches, not fleets." \
+          ⚠️ Signed with MCUboot's **published development key**, so no trust root is
+          enrolled and image signatures prove nothing. Fine for a bench; generate
+          your own key before a fleet.
+          " \
             out/* || gh release upload "${GITHUB_REF_NAME}" out/* --clobber
