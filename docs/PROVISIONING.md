@@ -279,7 +279,7 @@ $ cargo run -p runtt-smp --example ping -- /dev/runtt/<tag>-mgmt
 A board with no record uses its built-in defaults, which is the correct factory
 behaviour — that is what keeps an unprovisioned board answering `describe`. A
 board with a *damaged* record refuses to bring up CAN rather than guessing an
-address; see docs/WIRE_CONTRACT.md for why those two cases differ.
+address; see [`WIRE_CONTRACT.md`](https://github.com/shaunmulligan/runtt/blob/main/docs/WIRE_CONTRACT.md) for why those two cases differ.
 
 ## Signing
 

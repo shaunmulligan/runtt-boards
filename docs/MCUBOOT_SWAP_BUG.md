@@ -6,7 +6,7 @@ Draft of an upstream report, with a fix carried as a patch in
 **Scope, stated plainly.** `find_last_idx()` is genuinely unbounded and MCUboot
 was observed spinning in it on hardware. But it was **not** the cause of the
 deploy failure that led us here -- that turned out to be a malformed test image
-of our own making (see `docs/HARDWARE_GATE.md`), and **MCUboot swap on RP2040
+of our own making (see [`HARDWARE_GATE.md`](https://github.com/shaunmulligan/runtt/blob/main/docs/HARDWARE_GATE.md)), and **MCUboot swap on RP2040
 works correctly with a well-formed image**, verified end to end.
 
 So this is a robustness report, not a "MCUboot is broken" report: a bootloader

@@ -6,8 +6,8 @@ The Pi Hut as of **2026-08-30** and will age; the Zephyr claims are checked agai
 the pinned **v4.4.2** tree in this repo and are reproducible with the commands
 shown.
 
-Related: [ROADMAP.md](ROADMAP.md) for why these targets, [HARDWARE_GATE.md](HARDWARE_GATE.md)
-for the CI story, [WIRE_CONTRACT.md](WIRE_CONTRACT.md) for what a board must present.
+Related: [ROADMAP.md](https://github.com/shaunmulligan/runtt/blob/main/docs/ROADMAP.md) for why these targets, [HARDWARE_GATE.md](https://github.com/shaunmulligan/runtt/blob/main/docs/HARDWARE_GATE.md)
+for the CI story, [WIRE_CONTRACT.md](https://github.com/shaunmulligan/runtt/blob/main/docs/WIRE_CONTRACT.md) for what a board must present.
 
 ---
 
