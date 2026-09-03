@@ -134,7 +134,7 @@ boards:
     status: in-progress
     notes: >-
       Hardware on order. Needs the module dtsi swapped for the N16R8 variant and
-      a partition table chosen — see docs/HARDWARE_TARGETS.md
+      a partition table chosen — see NOTES.md
 
   - id: feather_canbus_rp2040
     name: Adafruit RP2040 CAN Bus Feather

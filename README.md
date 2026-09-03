@@ -65,7 +65,7 @@ available.
 
 **Being brought up**, not yet published:
 
-* **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen — see docs/HARDWARE_TARGETS.md
+* **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen — see NOTES.md
 * **Adafruit RP2040 CAN Bus Feather** (RP2040 + MCP25625) — Hardware on order. Zephyr has the board and `zephyr,canbus` is already chosen, but it ships no MCUboot slots, so a partition variant needs writing
 
 <!-- END GENERATED -->
@@ -80,7 +80,7 @@ flash.
 
 Boards are declared in [`boards.yml`](boards.yml), which drives the table above,
 the CI build list and the release assets. [`docs/PORTING.md`](docs/PORTING.md) is
-the walkthrough; [`docs/HARDWARE_TARGETS.md`](docs/HARDWARE_TARGETS.md) covers
+the walkthrough; [`NOTES.md`](NOTES.md) covers
 what each candidate still needs, and the boards deliberately rejected with the
 reasons.
 

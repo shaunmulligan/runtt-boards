@@ -18,7 +18,7 @@ discovering a board target had no MCUboot slots, and USB descriptors.
 ## 0. Before you buy anything
 
 Answer these from Zephyr's source, not from vendor marketing.
-[`HARDWARE_TARGETS.md`](HARDWARE_TARGETS.md) has worked examples, including boards
+[`NOTES.md`](NOTES.md) has worked examples, including boards
 that were rejected and why.
 
 **Does Zephyr have the board?**
