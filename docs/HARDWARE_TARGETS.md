@@ -34,7 +34,6 @@ That gap is what the boards below are for.
 |---|---|---|
 | Waveshare ESP32-S3-DEV-KIT-N16R8 | £10.60 | ESP32 milestone **and** CAN via TWAI |
 | Adafruit RP2040 CAN Bus Feather (MCP2515) | £19.20 | CAN on silicon we already know |
-| Raspberry Pi Pico 2 W (RP2350) | £6.70–£7.70 | Later USB bring-up on Cortex-M33 |
 
 Two boards with **different CAN controllers** is deliberate. MCP2515 (SPI,
 standalone) and TWAI (on-die, SJA1000-compatible) exercise completely different
@@ -168,7 +167,20 @@ SMP-over-ISO-TP, but it caps this board if CAN-FD ever matters.
 
 ---
 
-### 3. Raspberry Pi Pico 2 W (RP2350) — later USB bring-up
+### 3. Raspberry Pi Pico 2 W (RP2350) — DONE, and it is now a supported board
+
+**Arrived and brought up 2026-09-02.** All six checks in
+[PORTING.md](PORTING.md) pass on hardware and it ships provisioning images from
+v0.2.0 onward, so it is in `boards.yml` as `supported` rather than on this page's
+shopping list. Kept here for the SoC notes below, which are what the bring-up
+actually needed.
+
+The headline result: it needed **no new snippet files at all**. The module's
+`/rpi_pico.*/` key already matches, and the RP2040 conf and overlay are correct
+for RP2350 — same `raspberrypi,pico-usbd` driver, same `zephyr_udc0` label, also
+16 bidirectional endpoints. Slot offsets are identical too, so the provisioning
+image builder needed no new constants. That is the strongest evidence so far
+that the contract is not Pico-shaped.
 
 Not for CAN — RP2350 has no CAN controller either. Bought for USB bring-up on a
 Cortex-M33, and it is well supported upstream, wireless variant included:

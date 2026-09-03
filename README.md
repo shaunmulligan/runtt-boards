@@ -33,7 +33,7 @@ plugged in, rather than by which port it happens to occupy. Add
 
 ```bash
 ./runtt-board provision adafruit_feather_nrf52840 --name arm-01 --can-node-id 0x45
-./runtt-board provision rpi_pico --name pico-02 --release v0.1.0   # pin a release
+./runtt-board provision rpi_pico --name pico-02 --release v0.2.0   # pin a release
 ./runtt-board provision rpi_pico --name pico-03 --build            # build locally
 ```
 

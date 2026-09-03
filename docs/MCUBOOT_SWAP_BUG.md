@@ -1,7 +1,7 @@
 # MCUboot hangs in `find_last_idx()` — swap-using-offset, RP2040
 
 Draft of an upstream report, with a fix carried as a patch in
-`firmware/patches/`.
+`patches/`.
 
 **Scope, stated plainly.** `find_last_idx()` is genuinely unbounded and MCUboot
 was observed spinning in it on hardware. But it was **not** the cause of the
@@ -149,7 +149,7 @@ believing anything else.
 
 ## The fix, and what it does and does not resolve
 
-`firmware/patches/mcuboot/0001-bound-find_last_idx-loops.patch` guards both
+`patches/mcuboot/0001-bound-find_last_idx-loops.patch` guards both
 copies of the function: it returns early on a zero sector size and bounds the
 walk by the primary slot's own sector count, so the loop terminates for any
 input and can never return an index beyond a real sector.
@@ -222,7 +222,7 @@ but a deterministic test is what makes a report easy for a maintainer to accept.
 * [x] Behaviour change confirmed on hardware
 * [ ] Regression test injecting a corrupt trailer
 * [ ] Confirm which input is bad (`swap_size` vs `sector_sz`) — see caveats above
-* [ ] File upstream, then add the URL to `firmware/patches.yml` as `issue:`
+* [ ] File upstream, then add the URL to `patches.yml` as `issue:`
 
 ---
 
