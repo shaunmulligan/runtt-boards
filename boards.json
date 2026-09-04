@@ -96,7 +96,7 @@
       "id": "adafruit_feather_canbus_rp2040/rp2040/mcuboot",
       "name": "Adafruit RP2040 CAN Bus Feather",
       "soc": "RP2040 + MCP25625",
-      "status": "in-progress",
+      "status": "supported",
       "build": {
         "script": "scripts/build-feather-can.sh",
         "mode": "provision"

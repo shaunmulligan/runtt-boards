@@ -136,11 +136,20 @@ boards:
       Hardware on order. Needs the module dtsi swapped for the N16R8 variant and
       a partition table chosen — see NOTES.md
 
-  # Bring-up in progress, 2026-09-04. Proven on hardware: describe, deploy
-  # (swap + confirm) and logs-to-stdio over BOTH transports -- USB, and SMP over
-  # ISO-TP on the physical CAN bus (93 KB at 500 kbit/s through the MCP25625 to
-  # a BTT U2C, logs on the CAN log channel) -- plus the provisioning image by
-  # BOOTSEL. Still to run before promotion: revert and unplug.
+  # All six checks in docs/PORTING.md pass on real hardware (2026-09-04), and
+  # this board ran the deploy/logs/revert set over BOTH transports -- USB, and
+  # SMP over ISO-TP on the physical CAN bus (MCP25625 to a BTT U2C at
+  # 500 kbit/s, logs as raw frames on node+2). The revert was the first
+  # exercised over CAN: a deploy of an image with its CAN transport disabled
+  # went dark on the bus, the confirm deadline rebooted it, and MCUboot brought
+  # the old image back confirmed -- manageable again 78 s after the deploy
+  # started, no human involved. Pulling a bus wire mid-residency exits 1 after
+  # two failed heartbeats, so a restart policy fires.
+  #
+  # One defect found during bring-up belonged to the module and is fixed there:
+  # Zephyr's default ISO-TP receive pool (224 bytes) cannot hold an SMP upload
+  # chunk, which the vcan gate never saw because the right sizing sat in this
+  # repository's native-sim bring-up conf. See the module's Kconfig.
   #
   # The mcuboot variant is NOT upstream: this repository is a Zephyr BOARD_ROOT
   # (zephyr/module.yml) and boards/adafruit/... extends the upstream board with
@@ -149,7 +158,7 @@ boards:
   - id: adafruit_feather_canbus_rp2040/rp2040/mcuboot
     name: Adafruit RP2040 CAN Bus Feather
     soc: RP2040 + MCP25625
-    status: in-progress
+    status: supported
     build:
       script: scripts/build-feather-can.sh
       mode: provision
