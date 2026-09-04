@@ -1,0 +1,14 @@
+identifier: adafruit_feather_canbus_rp2040/rp2040/mcuboot
+name: Adafruit Feather RP2040 CAN bus (MCUboot)
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+ram: 264
+flash: 832
+supported:
+  - can
+  - gpio
+  - spi
+  - usb_device
+  - watchdog

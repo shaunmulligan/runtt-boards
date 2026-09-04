@@ -66,7 +66,7 @@ available.
 **Being brought up**, not yet published:
 
 * **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen — see NOTES.md
-* **Adafruit RP2040 CAN Bus Feather** (RP2040 + MCP25625) — Hardware on order. Zephyr has the board and `zephyr,canbus` is already chosen, but it ships no MCUboot slots, so a partition variant needs writing
+* **Adafruit RP2040 CAN Bus Feather** (RP2040 + MCP25625) — Unbrickable — the RP2040 mask ROM always gives you BOOTSEL back. The first board with both transports: dual-CDC USB and SMP over ISO-TP on CAN (500 kbit/s, node id from the identity record)
 
 <!-- END GENERATED -->
 

@@ -1,0 +1,9 @@
+# Extends the upstream board with an `mcuboot` variant, the same shape as
+# upstream's rpi_pico/rp2040/mcuboot. Upstream ships this board with a single
+# code partition and no slots, so nothing there can receive an update; this
+# variant is what makes it a runtt target.
+board:
+  extend: adafruit_feather_canbus_rp2040
+  variants:
+    - name: mcuboot
+      qualifier: rp2040

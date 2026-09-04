@@ -1,0 +1,33 @@
+/*
+ * Copyright (c) 2026 The runtt authors
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ *
+ * adafruit_feather_canbus_rp2040/rp2040/mcuboot: the upstream board plus the
+ * MCUboot slot layout, mirroring upstream's rpi_pico/rp2040/mcuboot variant.
+ *
+ * The include path is the one non-obvious line. This file lives in
+ * runtt-boards (an out-of-tree BOARD_ROOT extending the upstream board), so a
+ * plain quoted include cannot see the base dts -- quoted includes resolve
+ * relative to THIS file. <zephyr's dts/> is on the preprocessor include path,
+ * so step out of it into boards/. Deliberate, and contained to this line.
+ *
+ * The partition layout is deliberately IDENTICAL to the Pico's, even though
+ * this board has 8 MB of flash to the Pico's 2: same slot offsets, same
+ * storage offset, so the identity offset is the same 0x101b0000 and
+ * make-provision-uf2.py needs no new constants. The unused 6 MB is the price,
+ * and an 832 KB application slot is not the constraint on an RP2040. If a
+ * larger layout is ever wanted, it is a contract change for every tool that
+ * knows the offsets -- see boards.yml's identity note for what getting this
+ * wrong looks like.
+ */
+
+#include <../boards/adafruit/feather_canbus_rp2040/adafruit_feather_canbus_rp2040.dts>
+
+/delete-node/ &code_partition;
+#include <raspberrypi/partitions_2M_sysbuild.dtsi>
+
+/ {
+	chosen {
+		zephyr,code-partition = &slot0_partition;
+	};
+};

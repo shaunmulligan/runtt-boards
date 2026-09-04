@@ -136,10 +136,38 @@ boards:
       Hardware on order. Needs the module dtsi swapped for the N16R8 variant and
       a partition table chosen — see NOTES.md
 
-  - id: feather_canbus_rp2040
+  # Bring-up in progress, 2026-09-04. The USB half of the contract is proven on
+  # hardware -- describe (reporting can_node_id 0x42), a deploy that swaps and
+  # confirms, logs to container stdio, and the provisioning image flashed by
+  # BOOTSEL. Still to run: revert, unplug, and the reason the board exists --
+  # SMP over ISO-TP on the physical bus, blocked on a working USB-CAN adapter
+  # for the host side (two candidates so far, neither enumerates).
+  #
+  # The mcuboot variant is NOT upstream: this repository is a Zephyr BOARD_ROOT
+  # (zephyr/module.yml) and boards/adafruit/... extends the upstream board with
+  # the Pico 1's slot layout. Same offsets despite the 8 MB flash, so the
+  # identity offset and make-provision-uf2 constants are the Pico's.
+  - id: adafruit_feather_canbus_rp2040/rp2040/mcuboot
     name: Adafruit RP2040 CAN Bus Feather
     soc: RP2040 + MCP25625
     status: in-progress
+    build:
+      script: scripts/build-feather-can.sh
+      mode: provision
+    provision:
+      - from: build-feather-can-idle/provision.uf2
+        as: provision-adafruit_feather_canbus_rp2040.uf2
+    flash: Hold BOOTSEL, plug in, copy the file onto the drive that appears
+    probe: false
     notes: >-
-      Hardware on order. Zephyr has the board and `zephyr,canbus` is already
-      chosen, but it ships no MCUboot slots, so a partition variant needs writing
+      Unbrickable — the RP2040 mask ROM always gives you BOOTSEL back. The first
+      board with both transports: dual-CDC USB and SMP over ISO-TP on CAN
+      (500 kbit/s, node id from the identity record)
+    program:
+      method: uf2
+      volume_label: RPI-RP2
+      bootsel_usb: "2e8a:0003"
+    identity:
+      # The Pico 1's storage offset, deliberately: the mcuboot variant reuses
+      # partitions_2M_sysbuild.dtsi wholesale, 8 MB flash notwithstanding.
+      offset: 0x101b0000
