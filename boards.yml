@@ -136,12 +136,11 @@ boards:
       Hardware on order. Needs the module dtsi swapped for the N16R8 variant and
       a partition table chosen — see NOTES.md
 
-  # Bring-up in progress, 2026-09-04. The USB half of the contract is proven on
-  # hardware -- describe (reporting can_node_id 0x42), a deploy that swaps and
-  # confirms, logs to container stdio, and the provisioning image flashed by
-  # BOOTSEL. Still to run: revert, unplug, and the reason the board exists --
-  # SMP over ISO-TP on the physical bus, blocked on a working USB-CAN adapter
-  # for the host side (two candidates so far, neither enumerates).
+  # Bring-up in progress, 2026-09-04. Proven on hardware: describe, deploy
+  # (swap + confirm) and logs-to-stdio over BOTH transports -- USB, and SMP over
+  # ISO-TP on the physical CAN bus (93 KB at 500 kbit/s through the MCP25625 to
+  # a BTT U2C, logs on the CAN log channel) -- plus the provisioning image by
+  # BOOTSEL. Still to run before promotion: revert and unplug.
   #
   # The mcuboot variant is NOT upstream: this repository is a Zephyr BOARD_ROOT
   # (zephyr/module.yml) and boards/adafruit/... extends the upstream board with
