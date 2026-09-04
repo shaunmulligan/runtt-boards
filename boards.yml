@@ -136,10 +136,46 @@ boards:
       Hardware on order. Needs the module dtsi swapped for the N16R8 variant and
       a partition table chosen — see NOTES.md
 
-  - id: feather_canbus_rp2040
+  # All six checks in docs/PORTING.md pass on real hardware (2026-09-04), and
+  # this board ran the deploy/logs/revert set over BOTH transports -- USB, and
+  # SMP over ISO-TP on the physical CAN bus (MCP25625 to a BTT U2C at
+  # 500 kbit/s, logs as raw frames on node+2). The revert was the first
+  # exercised over CAN: a deploy of an image with its CAN transport disabled
+  # went dark on the bus, the confirm deadline rebooted it, and MCUboot brought
+  # the old image back confirmed -- manageable again 78 s after the deploy
+  # started, no human involved. Pulling a bus wire mid-residency exits 1 after
+  # two failed heartbeats, so a restart policy fires.
+  #
+  # One defect found during bring-up belonged to the module and is fixed there:
+  # Zephyr's default ISO-TP receive pool (224 bytes) cannot hold an SMP upload
+  # chunk, which the vcan gate never saw because the right sizing sat in this
+  # repository's native-sim bring-up conf. See the module's Kconfig.
+  #
+  # The mcuboot variant is NOT upstream: this repository is a Zephyr BOARD_ROOT
+  # (zephyr/module.yml) and boards/adafruit/... extends the upstream board with
+  # the Pico 1's slot layout. Same offsets despite the 8 MB flash, so the
+  # identity offset and make-provision-uf2 constants are the Pico's.
+  - id: adafruit_feather_canbus_rp2040/rp2040/mcuboot
     name: Adafruit RP2040 CAN Bus Feather
     soc: RP2040 + MCP25625
-    status: in-progress
+    status: supported
+    build:
+      script: scripts/build-feather-can.sh
+      mode: provision
+    provision:
+      - from: build-feather-can-idle/provision.uf2
+        as: provision-adafruit_feather_canbus_rp2040.uf2
+    flash: Hold BOOTSEL, plug in, copy the file onto the drive that appears
+    probe: false
     notes: >-
-      Hardware on order. Zephyr has the board and `zephyr,canbus` is already
-      chosen, but it ships no MCUboot slots, so a partition variant needs writing
+      Unbrickable — the RP2040 mask ROM always gives you BOOTSEL back. The first
+      board with both transports: dual-CDC USB and SMP over ISO-TP on CAN
+      (500 kbit/s, node id from the identity record)
+    program:
+      method: uf2
+      volume_label: RPI-RP2
+      bootsel_usb: "2e8a:0003"
+    identity:
+      # The Pico 1's storage offset, deliberately: the mcuboot variant reuses
+      # partitions_2M_sysbuild.dtsi wholesale, 8 MB flash notwithstanding.
+      offset: 0x101b0000

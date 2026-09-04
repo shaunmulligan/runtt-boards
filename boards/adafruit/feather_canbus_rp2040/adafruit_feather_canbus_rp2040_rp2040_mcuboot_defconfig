@@ -1,0 +1,16 @@
+# A variant defconfig REPLACES the base board's, so this is the base defconfig
+# (upstream, at v4.4.2) plus the two lines the mcuboot variant needs. If the
+# base grows an option, it has to be mirrored here -- the same maintenance
+# contract upstream's rpi_pico mcuboot variant accepts.
+CONFIG_BUILD_OUTPUT_UF2=y
+CONFIG_CLOCK_CONTROL=y
+CONFIG_GPIO=y
+CONFIG_PIO_RPI_PICO=y
+CONFIG_RESET=y
+CONFIG_USE_DT_CODE_PARTITION=y
+CONFIG_SERIAL=y
+CONFIG_UART_INTERRUPT_DRIVEN=y
+CONFIG_CONSOLE=y
+CONFIG_UART_CONSOLE=y
+# The mcuboot variant's additions: hex output for provisioning-image assembly.
+CONFIG_BUILD_OUTPUT_HEX=y
