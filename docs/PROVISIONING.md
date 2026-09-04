@@ -15,7 +15,8 @@ bench.
 > repository, checked out by west at `modules/runtt`. The commands are left as
 > they were run rather than retyped untested; `-DZEPHYR_EXTRA_MODULES` in
 > particular is no longer needed at all, because west now registers the module
-> from the manifest. See `scripts/build-feather.sh` for the current invocation.
+> from the manifest. See `scripts/build-feather.sh`, `build-pico.sh` or
+> `build-pico2w.sh` in this repository for the current invocation.
 
 ## Raspberry Pi Pico (RP2040) — no probe required
 
@@ -72,7 +73,7 @@ has no USB of its own — does so **completely silently**. No enumeration, no
 device node, nothing. A board in that state is indistinguishable from one that is
 unplugged or dead.
 
-`runtt-idle` (`firmware/idle/`) is that application: the module plus a
+`runtt-idle` (`idle/` in this repository) is that application: the module plus a
 no-op main. It reports `idle: true` over `describe`, so the runtime can say
 
     device is rpi_pico/rp2040/mcuboot freshly provisioned, awaiting its first firmware
@@ -278,7 +279,7 @@ $ cargo run -p runtt-smp --example ping -- /dev/runtt/<tag>-mgmt
 A board with no record uses its built-in defaults, which is the correct factory
 behaviour — that is what keeps an unprovisioned board answering `describe`. A
 board with a *damaged* record refuses to bring up CAN rather than guessing an
-address; see docs/WIRE_CONTRACT.md for why those two cases differ.
+address; see [`WIRE_CONTRACT.md`](https://github.com/shaunmulligan/runtt/blob/main/docs/WIRE_CONTRACT.md) for why those two cases differ.
 
 ## Signing
 
@@ -291,7 +292,7 @@ address; see docs/WIRE_CONTRACT.md for why those two cases differ.
 > Since provisioning is precisely when the trust root is set, a per-fleet key has
 > to be in place *before* boards are provisioned: the public half is baked into
 > MCUboot at this step, so changing it later means re-flashing every board over
-> SWD. See the note in `firmware/sysbuild-common.conf`.
+> SWD. See the note in `sysbuild-common.conf`.
 
 ---
 
@@ -424,5 +425,5 @@ bisection on hardware: that line alone, nothing else.
 Debugging tip that made this findable: build with the console on `uart0` rather
 than the USB log channel while bringing USB up. A console on a channel that
 never enumerates has nowhere to print the fatal error explaining why -- the
-board just looks silently dead. `firmware/bringup/feather-usb-uartconsole.overlay`
+board just looks silently dead. `bringup/feather-usb-uartconsole.overlay`
 does exactly that.

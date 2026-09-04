@@ -4,7 +4,7 @@
 # and `west patch apply` re-applies this. The only thing maintained here is the
 # diff, which should disappear once the fix lands upstream.
 #
-#   west patch apply -l firmware/patches.yml -b firmware/patches
+#   west patch apply -l patches.yml -b patches
 #
 # Verify with `west patch list`; `west patch clean` reverts modules to their
 # pinned revision.

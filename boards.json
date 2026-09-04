@@ -90,7 +90,7 @@
       "name": "Waveshare ESP32-S3 (DevKitC-compatible)",
       "soc": "ESP32-S3",
       "status": "in-progress",
-      "notes": "Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen \u2014 see docs/HARDWARE_TARGETS.md"
+      "notes": "Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen \u2014 see NOTES.md"
     },
     {
       "id": "feather_canbus_rp2040",
