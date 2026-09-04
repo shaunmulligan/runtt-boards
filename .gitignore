@@ -1,10 +1,20 @@
 /target
 **/*.rs.bk
 *.pdb
-# west workspace: the manifest repo is firmware/, and west clones its
-# dependencies as siblings at the repo root.
+# A west workspace assembled around this repo. Since the split, west puts
+# zephyr/, modules/ and bootloader/ BESIDE this repository (ws/boards/ is the
+# manifest repo), so these entries only guard against someone initialising a
+# workspace inside the checkout by mistake.
+#
+# /zephyr/ is NOT in this list any more, and that absence is load-bearing:
+# zephyr/module.yml is a tracked file -- it is what makes this repository a
+# Zephyr module with board_root, which is what makes the out-of-tree board
+# variants exist. The old entry silently ate that file out of `git add -A`, and
+# the result was CI failing with "board qualifiers not found" on a variant that
+# built perfectly in every local workspace, because the local sync did not
+# respect gitignore. An ignore rule named after a directory that can no longer
+# legitimately appear is not safe, it is a trap.
 /.west/
-/zephyr/
 /modules/
 /bootloader/
 /tools/

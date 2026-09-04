@@ -1,0 +1,9 @@
+# Makes this repository a Zephyr module so `board_root` is honoured: the board
+# variants under boards/ extend upstream boards with the MCUboot partition
+# layout runtt needs. Board support lives HERE rather than in
+# runtt-zephyr-module, which stays what a firmware author adds to west.yml --
+# module, snippet, board conf/overlay -- and nothing else.
+name: runtt-boards
+build:
+  settings:
+    board_root: .
