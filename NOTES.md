@@ -22,7 +22,7 @@ Draft of an upstream report, with a fix carried as a patch in
 **Scope, stated plainly.** `find_last_idx()` is genuinely unbounded and MCUboot
 was observed spinning in it on hardware. But it was **not** the cause of the
 deploy failure that led us here -- that turned out to be a malformed test image
-of our own making (see [`HARDWARE_GATE.md`](https://github.com/shaunmulligan/runtt/blob/main/docs/HARDWARE_GATE.md)), and **MCUboot swap on RP2040
+of our own making (see [`HARDWARE_GATE.md`](https://github.com/shaunmulligan/runtt/blob/main/NOTES.md)), and **MCUboot swap on RP2040
 works correctly with a well-formed image**, verified end to end.
 
 So this is a robustness report, not a "MCUboot is broken" report: a bootloader
@@ -254,7 +254,7 @@ The Pi Hut as of **2026-08-30** and will age; the Zephyr claims are checked agai
 the pinned **v4.4.2** tree in this repo and are reproducible with the commands
 shown.
 
-Related: [ROADMAP.md](https://github.com/shaunmulligan/runtt/blob/main/docs/ROADMAP.md) for why these targets, [HARDWARE_GATE.md](https://github.com/shaunmulligan/runtt/blob/main/docs/HARDWARE_GATE.md)
+Related: [ROADMAP.md](https://github.com/shaunmulligan/runtt/blob/main/NOTES.md) for why these targets, [HARDWARE_GATE.md](https://github.com/shaunmulligan/runtt/blob/main/NOTES.md)
 for the CI story, [WIRE_CONTRACT.md](https://github.com/shaunmulligan/runtt/blob/main/docs/WIRE_CONTRACT.md) for what a board must present.
 
 ---
@@ -278,10 +278,10 @@ That gap is what the boards below are for.
 
 ### On order
 
-| Board | Price | Buys us |
-|---|---|---|
-| Waveshare ESP32-S3-DEV-KIT-N16R8 | £10.60 | ESP32 milestone **and** CAN via TWAI |
-| Adafruit RP2040 CAN Bus Feather (MCP2515) | £19.20 | CAN on silicon we already know |
+| Board | Price | Buys us | Status |
+|---|---|---|---|
+| Waveshare ESP32-S3-DEV-KIT-N16R8 | £10.60 | ESP32 milestone **and** CAN via TWAI | still on order |
+| Adafruit RP2040 CAN Bus Feather (MCP2515) | £19.20 | CAN on silicon we already know | **arrived, supported, 2026-09-04** — see below |
 
 Two boards with **different CAN controllers** is deliberate. MCP2515 (SPI,
 standalone) and TWAI (on-die, SJA1000-compatible) exercise completely different
@@ -362,7 +362,18 @@ USB. One cable, two independent devices. Consequences:
 
 ---
 
-#### 2. Adafruit RP2040 CAN Bus Feather, MCP2515 — £19.20
+#### 2. Adafruit RP2040 CAN Bus Feather, MCP2515 — £19.20 — DONE
+
+**Arrived and promoted to supported, 2026-09-04.** All six PORTING checks pass,
+with deploy, logs and revert proven over BOTH transports; the physical-bus half
+ran against a BTT U2C (gs_usb) at 500 kbit/s. Ships in releases from v0.3.0.
+The notes below are kept as the record of what the bring-up needed. Three things
+it added beyond them: this repo became a Zephyr BOARD_ROOT (the mcuboot variant
+is not upstream), the module gained ISOTP receive-pool configdefaults (Zephyr's
+224-byte default cannot hold an SMP chunk), and uf2_merge learned that the
+RP2040 bootrom silently discards non-256-byte UF2 blocks while still counting
+them -- the identity record now pads.
+
 
 CAN controller **and** transceiver both onboard, on RP2040. No wiring, no
 breadboard, no external transceiver — a complete CAN node out of the box.
