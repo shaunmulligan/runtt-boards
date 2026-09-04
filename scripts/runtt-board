@@ -235,7 +235,15 @@ def uf2_merge(src_uf2, data, base_addr):
     family = blocks[0][3]
     flags = blocks[0][0]
     for off in range(0, len(data), UF2_PAYLOAD):
-        chunk = data[off:off + UF2_PAYLOAD]
+        # Pad every appended block to a full 256-byte payload. The RP2040
+        # bootrom accepts ONLY size == 256 at a 256-aligned address; anything
+        # else is silently ignored -- but numBlocks still counts it, so the
+        # transfer never completes and the board sits in BOOTSEL forever with
+        # no reboot and no error. Observed with a 32-byte identity record as
+        # the final block: copy, sync and unmount all succeed, and nothing
+        # happens. 0xff padding, so the rest of the flash page reads as
+        # erased, which is what the identity reader expects after the record.
+        chunk = data[off:off + UF2_PAYLOAD].ljust(UF2_PAYLOAD, b"\xff")
         blocks.append((flags, base_addr + off, len(chunk), family, chunk))
 
     out = bytearray()
@@ -380,7 +388,28 @@ def flash_uf2(b, images):
         if mounted_here:
             subprocess.run(["udisksctl", "unmount", "-b", str(real)],
                            stdout=subprocess.DEVNULL, check=False)
-    print("  done. The board reboots itself out of BOOTSEL.")
+
+    # VERIFY the reboot rather than announce it. BOOTSEL has no error channel:
+    # the fake FAT drive accepts any write, and the bootrom silently discards
+    # blocks it does not like (wrong payload size, wrong alignment, wrong
+    # family) while numBlocks still counts them -- so the transfer never
+    # completes and the board just sits there. Every host-side step succeeds in
+    # that case; the ONLY observable that means "flashed" is the board leaving
+    # BOOTSEL, i.e. this block device disappearing. An earlier version printed
+    # "the board reboots itself" as a statement of hope, and a 32-byte identity
+    # block proved it wrong: copy, sync and unmount all reported success and
+    # nothing had happened.
+    import time
+    for _ in range(20):
+        if not real.exists():
+            print("  flashed: the board left BOOTSEL.")
+            break
+        time.sleep(0.5)
+    else:
+        die(f"{real} is still present 10 s after the copy: the bootrom did not\n"
+            "  accept the image. Every block must be a 256-byte payload at a\n"
+            "  256-aligned address with the right family id -- if this file was\n"
+            "  modified or merged, check the blocks, not the copy.")
 
 
 def flash_swd(b, images, extra=()):
