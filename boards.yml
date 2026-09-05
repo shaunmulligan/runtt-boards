@@ -23,6 +23,8 @@
 #   flash        how a user gets it onto the board (prose, for the tables).
 #   probe        whether a debug probe is required.
 #   notes        anything a user must know BEFORE flashing. Appears in the tables.
+#   guide        the board's getting-started walkthrough; the README table links
+#                the board name to it. Checked for existence at generation time.
 #   program      the mechanics scripts/runtt-board uses to write a board:
 #                  method        uf2 | swd
 #                  volume_label  (uf2) the mass-storage label to look for
@@ -40,6 +42,7 @@
 
 boards:
   - id: rpi_pico/rp2040/mcuboot
+    guide: docs/start-rpi_pico.md
     name: Raspberry Pi Pico
     soc: RP2040
     status: supported
@@ -79,6 +82,7 @@ boards:
   # driver, same `zephyr_udc0` label, also 16 bidirectional endpoints. Verified in
   # the linked ELF, not inferred from Kconfig.
   - id: rpi_pico2/rp2350a/m33/w/mcuboot
+    guide: docs/start-rpi_pico2.md
     name: Raspberry Pi Pico 2 W
     soc: RP2350
     status: supported
@@ -102,6 +106,7 @@ boards:
       offset: 0x101b0000
 
   - id: adafruit_feather_nrf52840/nrf52840
+    guide: docs/start-adafruit_feather_nrf52840.md
     name: Adafruit Feather nRF52840
     soc: nRF52840
     status: supported
@@ -156,6 +161,7 @@ boards:
   # the Pico 1's slot layout. Same offsets despite the 8 MB flash, so the
   # identity offset and make-provision-uf2 constants are the Pico's.
   - id: adafruit_feather_canbus_rp2040/rp2040/mcuboot
+    guide: docs/start-adafruit_feather_canbus_rp2040.md
     name: Adafruit RP2040 CAN Bus Feather
     soc: RP2040 + MCP25625
     status: supported

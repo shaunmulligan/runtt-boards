@@ -88,7 +88,16 @@ def _rows(boards, link_base):
         files = " + ".join(f"[`{a['as']}`]({link_base}/{a['as']})" for a in b["provision"])
         probe = "Yes, SWD" if b.get("probe") else "**No**"
         note = (b.get("notes") or "").strip()
-        rows.append(f"| **{b['name']}** ({b['soc']}) | {files} | {probe} | {b['flash']}."
+        # The board name links to its getting-started guide. Validated here so a
+        # renamed or missing guide fails --check-readme instead of shipping a
+        # dead link in the one table everyone reads first.
+        name = f"**{b['name']}**"
+        if b.get("guide"):
+            if not (REPO / b["guide"]).is_file():
+                sys.exit(f"boards.yml: {b['id']} names guide {b['guide']}, "
+                         "which does not exist")
+            name = f"[{name}]({b['guide']})"
+        rows.append(f"| {name} ({b['soc']}) | {files} | {probe} | {b['flash']}."
                     + (f" **{note}** " if b.get("probe") else f" {note}") + " |")
     return rows
 
