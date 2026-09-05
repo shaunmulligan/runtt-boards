@@ -25,6 +25,7 @@ manifest:
           - zcbor
           - cmsis
           - cmsis_6
+          - hal_espressif
           - hal_nordic
           - hal_rpi_pico
           - mcuboot
