@@ -1,0 +1,23 @@
+/*
+ * ESP32-S3 bring-up: the whole contract on ONE wire, the chip's built-in
+ * USB-Serial/JTAG. No bootloader, no USB-OTG, no second channel -- SMP and the
+ * console share the link and the runtime demultiplexes them by the console
+ * transport's framing markers. This is the single-channel configuration the
+ * module's RUNTT_CHANNELS=1 exists for, and the S3's sibling (ESP32-C3) has no
+ * other option, so proving it here proves it there.
+ *
+ * usb_serial is the ROM's own device (303a:1001): it enumerates before any
+ * firmware runs, survives a wedged application, and is also what esptool
+ * flashes over -- one port for everything.
+ */
+&usb_serial {
+	status = "okay";
+};
+
+/ {
+	chosen {
+		zephyr,uart-mcumgr = &usb_serial;
+		zephyr,console = &usb_serial;
+		zephyr,shell-uart = &usb_serial;
+	};
+};

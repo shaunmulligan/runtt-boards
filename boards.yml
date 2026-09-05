@@ -138,8 +138,10 @@ boards:
     soc: ESP32-S3
     status: in-progress
     notes: >-
-      Hardware on order. Needs the module dtsi swapped for the N16R8 variant and
-      a partition table chosen — see NOTES.md
+      Contract proven over the dual-CDC composite on USB-OTG: describe, logs to
+      container stdio, and a deploy that uploads, swaps and confirms — four of
+      the six PORTING.md checks. Outstanding: the unplug case, and a
+      provisioning image on a factory-fresh board. See NOTES.md
 
   # All six checks in docs/PORTING.md pass on real hardware (2026-09-04), and
   # this board ran the deploy/logs/revert set over BOTH transports -- USB, and

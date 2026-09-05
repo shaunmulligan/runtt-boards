@@ -66,7 +66,7 @@ available.
 
 **Being brought up**, not yet published:
 
-* **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Hardware on order. Needs the module dtsi swapped for the N16R8 variant and a partition table chosen — see NOTES.md
+* **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Contract proven over the dual-CDC composite on USB-OTG: describe, logs to container stdio, and a deploy that uploads, swaps and confirms — four of the six PORTING.md checks. Outstanding: the unplug case, and a provisioning image on a factory-fresh board. See NOTES.md
 
 <!-- END GENERATED -->
 

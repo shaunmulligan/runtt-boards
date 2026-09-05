@@ -317,13 +317,25 @@ ports over — unlike classic ESP32, which has **no USB device controller at all
 **What we have to write** — all in a new snippet board file, mirroring the four we
 already carry:
 
-1. **Module dtsi swap.** The stock board dts includes `esp32s3_wroom_n8.dtsi`
-   (8 MB flash, *no PSRAM*). We want `esp32s3_wroom_n16r8.dtsi`, which exists
-   upstream. The whole difference is two properties:
-   ```dts
-   &flash0 { reg  = <0x0 DT_SIZE_M(16)>; };
-   &psram0 { size = <DT_SIZE_M(8)>;      };
-   ```
+1. **Module dtsi swap — NOT needed, and it would narrow compatibility.**
+   Written here originally as a required step: the stock board dts includes
+   `esp32s3_wroom_n8.dtsi` while the hardware is N16R8, so swapping in
+   `esp32s3_wroom_n16r8.dtsi` looked obviously right.
+
+   It is not. The board runs the full contract on the stock N8 dtsi -- the
+   bootloader notes the mismatch (`Detected size(16384k) larger than the size in
+   the binary image header(8192k)`) and carries on with the header value. And
+   because the partition table is only ~4 MB (see below), the same image is
+   valid on N4, N8R8 and N16R8 alike.
+
+   So build for the SMALLER variant and one image serves them all. The reverse
+   is the dangerous direction: an N16R8-configured image on N8 hardware would
+   place partitions past the end of flash, and MCUboot would be writing a slot
+   that does not exist. PSRAM is the one thing that WOULD force a split -- it is
+   compiled in, so R2 vs R8 needs separate builds; R8 vs R8 does not.
+
+   Swap the dtsi only to *use* the extra flash (bigger slots), which is a
+   product decision and costs a second image in the release matrix.
 2. **Partition table.** `esp32s3_devkitc` includes `partitions_0x0_amp_4M.dtsi` — a
    4 MB layout, on a board that has 8 MB even in its stock form. Left alone it maps
    the bottom quarter of our 16 MB and ignores the rest. Options:
@@ -528,6 +540,161 @@ grep -cE "usb_otg|usb_serial" zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common
 | Pico + SN65HVD230 alone | SN65HVD230 is a *transceiver* — physical layer only. No controller, so nothing for Zephyr to drive. |
 
 
+
+---
+
+## ESP32-S3 bring-up, stages 1-3 (2026-09-05)
+
+Stages 1-2 were an afternoon, as predicted. Stage 3 (MCUboot) proved the big
+machinery and found one real defect, still open.
+
+**Proven on this SoC, third architecture (Xtensa):**
+
+* Swap mode: `SWAP_SCRATCH`, pinned per-board via `bringup/sysbuild-esp32s3.conf`
+  passed as `-DSB_EXTRA_CONF_FILE` so it overrides the common OFFSET pin.
+  Upstream carves ESP32 out of offset-preference and ships a scratch partition
+  in its own table; both halves of the build verified to agree.
+* MCUboot swaps, and **the confirm deadline + revert work unaided**: a deploy
+  whose new image could not be reached was reverted by the deadline's reboot --
+  MCUboot's own console (enabled on UART0 by
+  `bringup/esp32s3-mcuboot-console.conf`) shows `Swap type: test` on the deploy
+  boot and `Swap type: revert` 60 s later. The §6 safety property now holds on
+  RP2350, nRF52840 and ESP32-S3.
+* The **runtime-side single-channel demux**: a full 140 KB upload over the
+  shared USB-Serial/JTAG link, with clean demultiplexed application logs in
+  container stdio. First hardware target for `RUNTT_CHANNELS=1`.
+
+**The warm-reset RX defect: found, fixed, carried as a patch (2026-09-05).**
+The USB-Serial-JTAG's `SERIAL_OUT_RECV_PKT` interrupt is raised per received
+packet, not while data is available. Bytes already in the RX FIFO when the
+interrupt is enabled raise nothing -- and while the FIFO holds data the
+controller NAKs the host, so no packet can ever arrive to raise it. A software
+reset while the host streams (which is what `os reset` after an upload IS)
+guarantees a non-empty FIFO at the next boot's irq_rx_enable, because the
+controller and its FIFOs deliberately survive warm resets. Zephyr's driver
+already handles the mirror-image TX case (`irq_tx_enable` delivers the callback
+by hand when TX-ready is already true); the fix gives RX the same treatment.
+`patches/zephyr/0001-serial_esp32_usb-*.patch`, upstreamable, verified by the
+previously-failing deploy completing end to end: upload, warm reset, reconnect,
+confirm, resident. Matches the known issue class in arduino-esp32#9316.
+
+Found by enabling MCUboot's console and reading the trailer across boots rather
+than guessing: the swap had been working all along (it logs nothing at INF), and
+the deadline's revert of the unreachable image was the safety net doing its job
+on a third architecture -- the "failure" everyone chased for an hour was the
+platform working as designed around a one-line driver gap.
+
+CI also gained `west patch apply` in workspace assembly: it had never applied
+patches.yml, which was harmless while the only patch was defensive hardening and
+becomes load-bearing the day a board cannot deploy without its patch.
+
+## ESP32-S3 over USB-OTG: working, and the log mode that blocked it
+
+**2026-09-05.** The board runs the whole contract over the dual CDC-ACM
+composite on `usb_otg` (dwc2) -- enumeration, `describe`, `/dev/runtt` symlinks
+keyed off the MAC, upload, the scratch swap, boot, confirm, and
+revert-when-unconfirmed. Verified in production shape: console on
+`cdc_acm_log`, confirm deadline and watchdog both on, application logs arriving
+on container stdio.
+
+### The root cause, which was ours
+
+`app-test/prj.conf` sets `CONFIG_LOG_MODE_IMMEDIATE=y`. In immediate mode every
+`LOG_INF` is written synchronously from whichever context logs, including the
+USB device thread and its ISRs. A blocking 115200-baud UART write inside
+enumeration misses the host's timing windows, and the composite never finishes
+coming up. The device reaches
+
+```
+<inf> usbd_core: Actual device speed 1
+```
+
+-- so the host HAS issued a bus reset and set the speed -- and then stalls with
+no control transfer completing.
+
+Fixed in the module snippet (`snippets/runtt/boards/esp32s3_devkitc.conf`),
+which forces `CONFIG_LOG_MODE_DEFERRED=y`. `EXTRA_CONF_FILE` merges after the
+application's `prj.conf`, so a per-SoC constraint belongs there rather than in
+the application -- and `app-test/prj.conf` describes itself as "what a
+customer's own application config would look like", so firmware written from
+that starting point would otherwise inherit a USB stack that never enumerates.
+
+Scoped to this SoC. The other boards keep `IMMEDIATE`, and `can_log.c` is built
+around it: it batches because immediate mode hands a backend one byte per call,
+and omits `.is_ready` because immediate mode has no log thread to drain the
+retry mask. Accommodations rather than dependencies, but switching them is a
+change to test on CAN hardware.
+
+### How it was found, because the route was mostly wrong
+
+Five deploys failed and two succeeded before the variable was identified, and
+the intermediate theories were all wrong. Recorded so the next person does not
+walk the same path:
+
+| theory | how it died |
+|---|---|
+| the OTG composite does not enumerate | the witness reader was holding DTR, which holds EN -- gotcha 4 below |
+| MCUboot declines the swap | the swap works; state was being read *after* a revert had already undone it |
+| no peripheral reset before init | `usb_wrap_hal_init()` already pulses `perip_rst_en0.usb_rst` from `.pre_enable` |
+| the console on `cdc_acm_log` blocks boot | moving it to `uart0` failed identically |
+| a timing margin before USB init | `CONFIG_BOOT_DELAY=1500` changed nothing |
+| the host never sees a detach on warm reset | `udevadm monitor` across a bare `os reset`: clean remove x5 then add x5, ~300 ms |
+
+What actually settled it was flashing a quiet build **directly** and finding it
+failed to enumerate from a COLD boot -- which removed the swap, the warm reset
+and the deploy sequence from the picture in one step, and left a config
+difference as the only candidate.
+
+The lesson worth carrying: the failing and succeeding builds differed in more
+than one way for most of the investigation. Reducing to a single-variable diff
+between two `.config` files is what turned a correlation into a cause.
+
+### Bench cost
+
+Every flash needs the download-mode dance (hold BOOT, tap RESET, release BOOT)
+because the running application owns the PHY. Budget two button presses per
+iteration, and prefer over-the-air deploys once the board is up.
+
+---
+
+**Four bench gotchas worth not rediscovering:**
+
+* MCUboot's scratch swap logs NOTHING at INF between "Swap type: X" and
+  "Jumping" -- a completed swap and a skipped one read identically. The trailer
+  state on the NEXT boot is the evidence (`image_ok=0x3` after a swap the
+  previous line claimed was "test" proves the swap ran).
+* The chip parks in the ROM downloader if esptool's closing hard-reset does not
+  take: ROM USB device enumerated, no console, no SMP. `esptool run` recovers
+  it. Looks exactly like a bricked board and is not.
+* The USB-Serial/JTAG re-enumerates on hard reset (stale fds for any holder)
+  but NOT on soft reset. The CH343 UART bridge survives everything, which is
+  why the MCUboot witness console lives there.
+* **Holding the CH343 witness open asserts DTR, and DTR is wired to EN: the
+  ESP32 is held in reset for as long as anything reads that port.** This is the
+  nastiest of the four, because the witness is exactly what you reach for when a
+  board will not come up, and every symptom it produces points somewhere else.
+  It cost an hour: the dual-CDC composite appeared not to enumerate, the ROM USB
+  device was missing (read as "the app took the PHY"), the witness stayed silent
+  through repeated RESET presses, and every esptool reset landed in
+  `boot:0x0 (DOWNLOAD)`. All of it was one `cat` holding DTR low. Closing the
+  reader made the board boot and enumerate immediately.
+
+  RTS is NOT wired -- pulsing it does nothing, which is what wrongly cleared the
+  reader from suspicion the first time. Test both lines before absolving your
+  instrumentation.
+
+  Read it with both lines deasserted before and after open:
+
+  ```python
+  s = serial.Serial()
+  s.port = '/dev/ttyACM1'; s.baudrate = 115200; s.timeout = 0.2
+  s.dtr = False; s.rts = False
+  s.open()
+  s.dtr = False; s.rts = False      # again: opening can re-assert
+  ```
+
+  Verified: with that reader attached the board stays enumerated and the witness
+  still captures MCUboot live during a deploy.
 
 ---
 

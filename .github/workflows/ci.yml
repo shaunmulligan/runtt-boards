@@ -61,6 +61,19 @@ jobs:
           west list
           pip install --quiet -r zephyr/scripts/requirements-base.txt
 
+      # The patches are part of what "the pinned revision" means here, and CI
+      # not applying them was a silent gap: every build until now used an
+      # unpatched tree, which mattered the day a patch became load-bearing (the
+      # ESP32-S3 cannot complete a deploy without its serial driver fix).
+      # `west update` restores pristine sources, so apply after it, every time.
+      - name: Apply the carried patches
+        run: |
+          # Global flags BEFORE the subcommand, and paths relative to the
+          # manifest module (boards/), not the workspace: this west-patch
+          # version rejects flags after `apply` with exit 2.
+          west patch -l patches.yml -b patches apply
+          west patch -l patches.yml -b patches list
+
       # 2 GB for the one toolchain we need. The SDK is versioned, so the key can
       # be exact and the cache never goes stale silently.
       - name: Cache the Zephyr SDK
