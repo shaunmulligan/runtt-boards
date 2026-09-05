@@ -317,13 +317,25 @@ ports over — unlike classic ESP32, which has **no USB device controller at all
 **What we have to write** — all in a new snippet board file, mirroring the four we
 already carry:
 
-1. **Module dtsi swap.** The stock board dts includes `esp32s3_wroom_n8.dtsi`
-   (8 MB flash, *no PSRAM*). We want `esp32s3_wroom_n16r8.dtsi`, which exists
-   upstream. The whole difference is two properties:
-   ```dts
-   &flash0 { reg  = <0x0 DT_SIZE_M(16)>; };
-   &psram0 { size = <DT_SIZE_M(8)>;      };
-   ```
+1. **Module dtsi swap — NOT needed, and it would narrow compatibility.**
+   Written here originally as a required step: the stock board dts includes
+   `esp32s3_wroom_n8.dtsi` while the hardware is N16R8, so swapping in
+   `esp32s3_wroom_n16r8.dtsi` looked obviously right.
+
+   It is not. The board runs the full contract on the stock N8 dtsi -- the
+   bootloader notes the mismatch (`Detected size(16384k) larger than the size in
+   the binary image header(8192k)`) and carries on with the header value. And
+   because the partition table is only ~4 MB (see below), the same image is
+   valid on N4, N8R8 and N16R8 alike.
+
+   So build for the SMALLER variant and one image serves them all. The reverse
+   is the dangerous direction: an N16R8-configured image on N8 hardware would
+   place partitions past the end of flash, and MCUboot would be writing a slot
+   that does not exist. PSRAM is the one thing that WOULD force a split -- it is
+   compiled in, so R2 vs R8 needs separate builds; R8 vs R8 does not.
+
+   Swap the dtsi only to *use* the extra flash (bigger slots), which is a
+   product decision and costs a second image in the release matrix.
 2. **Partition table.** `esp32s3_devkitc` includes `partitions_0x0_amp_4M.dtsi` — a
    4 MB layout, on a board that has 8 MB even in its stock form. Left alone it maps
    the bottom quarter of our 16 MB and ignores the rest. Options:
@@ -576,67 +588,72 @@ CI also gained `west patch apply` in workspace assembly: it had never applied
 patches.yml, which was harmless while the only patch was defensive hardening and
 becomes load-bearing the day a board cannot deploy without its patch.
 
-## ESP32-S3 over USB-OTG: the dual-CDC contract works; warm-reset re-enumeration does not
+## ESP32-S3 over USB-OTG: working, and the log mode that blocked it
 
-**2026-09-05.** The board runs the whole contract over the dual CDC-ACM composite
-on `usb_otg` (dwc2), which is the configuration the roadmap predicted would port
-directly. A deploy completed end to end and was confirmed:
+**2026-09-05.** The board runs the whole contract over the dual CDC-ACM
+composite on `usb_otg` (dwc2) -- enumeration, `describe`, `/dev/runtt` symlinks
+keyed off the MAC, upload, the scratch swap, boot, confirm, and
+revert-when-unconfirmed. Verified in production shape: console on
+`cdc_acm_log`, confirm deadline and watchdog both on, application logs arriving
+on container stdio.
+
+### The root cause, which was ours
+
+`app-test/prj.conf` sets `CONFIG_LOG_MODE_IMMEDIATE=y`. In immediate mode every
+`LOG_INF` is written synchronously from whichever context logs, including the
+USB device thread and its ISRs. A blocking 115200-baud UART write inside
+enumeration misses the host's timing windows, and the composite never finishes
+coming up. The device reaches
 
 ```
-Swap type: test -> full scratch swap -> Jumping to the first image slot
-49 host control transfers, 12 SETUP events, mcu: image confirmed
+<inf> usbd_core: Actual device speed 1
 ```
 
-Enumeration, `describe`, `/dev/runtt` symlinks keyed off the MAC, upload, swap,
-boot, confirm, and revert-when-unconfirmed all work. What does not work reliably
-is the device coming back on the bus after the warm reset that `os reset`
-performs.
+-- so the host HAS issued a bus reset and set the speed -- and then stalls with
+no control transfer completing.
 
-### The measurement, because the correlation is the whole finding
+Fixed in the module snippet (`snippets/runtt/boards/esp32s3_devkitc.conf`),
+which forces `CONFIG_LOG_MODE_DEFERRED=y`. `EXTRA_CONF_FILE` merges after the
+application's `prj.conf`, so a per-SoC constraint belongs there rather than in
+the application -- and `app-test/prj.conf` describes itself as "what a
+customer's own application config would look like", so firmware written from
+that starting point would otherwise inherit a USB stack that never enumerates.
 
-| image | console | USB debug logging | deploy |
-|---|---|---|---|
-| no-deadline build | `cdc_acm_log` | off | FAIL x3 |
-| same + console on uart0 | `uart0` | off | FAIL |
-| same + `CONFIG_BOOT_DELAY=1500` | `uart0` | off | FAIL |
-| same + `UDC_DRIVER_LOG_LEVEL_DBG` | `uart0` | **on** | **CONFIRMED x2** |
+Scoped to this SoC. The other boards keep `IMMEDIATE`, and `can_log.c` is built
+around it: it batches because immediate mode hands a backend one byte per call,
+and omits `.is_ready` because immediate mode has no log thread to drain the
+retry mask. Accommodations rather than dependencies, but switching them is a
+change to test on CAN hardware.
 
-Verbose 2/2, quiet 0/5. Reproducible, so not a race that happened to win.
+### How it was found, because the route was mostly wrong
 
-**Eliminated by test, not by reasoning:**
+Five deploys failed and two succeeded before the variable was identified, and
+the intermediate theories were all wrong. Recorded so the next person does not
+walk the same path:
 
-* *Console routing.* Moving `zephyr,console` off `cdc_acm_log` to `uart0`
-  changed nothing, so this is not the log backend blocking on a CDC channel
-  that has not enumerated.
-* *A timing margin before USB init.* 1.5 s of `CONFIG_BOOT_DELAY` -- which lands
-  before APPLICATION-level init, verified at `kernel/init.c:311` -- changed
-  nothing.
-* *A missing peripheral reset.* `usb_wrap_hal_init()` already calls
-  `_usb_wrap_ll_reset_register()` (pulses `SYSTEM.perip_rst_en0.usb_rst`), and
-  the quirk calls it from `.pre_enable`, before core init. A patch adding a
-  reset would have fixed something that is not broken.
+| theory | how it died |
+|---|---|
+| the OTG composite does not enumerate | the witness reader was holding DTR, which holds EN -- gotcha 4 below |
+| MCUboot declines the swap | the swap works; state was being read *after* a revert had already undone it |
+| no peripheral reset before init | `usb_wrap_hal_init()` already pulses `perip_rst_en0.usb_rst` from `.pre_enable` |
+| the console on `cdc_acm_log` blocks boot | moving it to `uart0` failed identically |
+| a timing margin before USB init | `CONFIG_BOOT_DELAY=1500` changed nothing |
+| the host never sees a detach on warm reset | `udevadm monitor` across a bare `os reset`: clean remove x5 then add x5, ~300 ms |
 
-### The hypothesis to test next
+What actually settled it was flashing a quiet build **directly** and finding it
+failed to enumerate from a COLD boot -- which removed the swap, the warm reset
+and the deploy sequence from the picture in one step, and left a config
+difference as the only candidate.
 
-The quirk disables the PHY pad only in `.disable`
-(`usb_wrap_ll_phy_enable_pad(false)`), never at init. Across
-`RTC_SW_CPU_RST` the pad plausibly stays enabled from the previous boot, so the
-host never observes a detach and has no attach edge to re-enumerate on. That
-fits every result above: a delay *before* USB init cannot help because it
-creates no detach, while verbose logging stretches the enumeration conversation
-until the host re-probes of its own accord.
+The lesson worth carrying: the failing and succeeding builds differed in more
+than one way for most of the investigation. Reducing to a single-variable diff
+between two `.config` files is what turned a correlation into a cause.
 
-If that is right, the fix is a deliberate detach at init -- disable the PHY pad,
-hold it long enough for the host to notice, then enable -- in the ESP32 dwc2
-quirk, alongside the `serial_esp32_usb` patch this repository already carries.
-Confirm it first by watching `dmesg -w` across a warm reset: if the host logs no
-disconnect, the hypothesis holds.
-
-### Bench cost worth knowing
+### Bench cost
 
 Every flash needs the download-mode dance (hold BOOT, tap RESET, release BOOT)
-because the running application owns the PHY, and every warm-reset failure needs
-a hard RESET to get USB back. Budget two button presses per iteration.
+because the running application owns the PHY. Budget two button presses per
+iteration, and prefer over-the-air deploys once the board is up.
 
 ---
 
