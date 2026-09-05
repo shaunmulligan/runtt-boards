@@ -576,7 +576,7 @@ CI also gained `west patch apply` in workspace assembly: it had never applied
 patches.yml, which was harmless while the only patch was defensive hardening and
 becomes load-bearing the day a board cannot deploy without its patch.
 
-**Three bench gotchas worth not rediscovering:**
+**Four bench gotchas worth not rediscovering:**
 
 * MCUboot's scratch swap logs NOTHING at INF between "Swap type: X" and
   "Jumping" -- a completed swap and a skipped one read identically. The trailer
@@ -588,6 +588,32 @@ becomes load-bearing the day a board cannot deploy without its patch.
 * The USB-Serial/JTAG re-enumerates on hard reset (stale fds for any holder)
   but NOT on soft reset. The CH343 UART bridge survives everything, which is
   why the MCUboot witness console lives there.
+* **Holding the CH343 witness open asserts DTR, and DTR is wired to EN: the
+  ESP32 is held in reset for as long as anything reads that port.** This is the
+  nastiest of the four, because the witness is exactly what you reach for when a
+  board will not come up, and every symptom it produces points somewhere else.
+  It cost an hour: the dual-CDC composite appeared not to enumerate, the ROM USB
+  device was missing (read as "the app took the PHY"), the witness stayed silent
+  through repeated RESET presses, and every esptool reset landed in
+  `boot:0x0 (DOWNLOAD)`. All of it was one `cat` holding DTR low. Closing the
+  reader made the board boot and enumerate immediately.
+
+  RTS is NOT wired -- pulsing it does nothing, which is what wrongly cleared the
+  reader from suspicion the first time. Test both lines before absolving your
+  instrumentation.
+
+  Read it with both lines deasserted before and after open:
+
+  ```python
+  s = serial.Serial()
+  s.port = '/dev/ttyACM1'; s.baudrate = 115200; s.timeout = 0.2
+  s.dtr = False; s.rts = False
+  s.open()
+  s.dtr = False; s.rts = False      # again: opening can re-assert
+  ```
+
+  Verified: with that reader attached the board stays enumerated and the witness
+  still captures MCUboot live during a deploy.
 
 ---
 
