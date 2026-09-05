@@ -531,4 +531,49 @@ grep -cE "usb_otg|usb_serial" zephyr/dts/xtensa/espressif/esp32s3/esp32s3_common
 
 ---
 
+## ESP32-S3 bring-up, stages 1-3 (2026-09-05)
+
+Stages 1-2 were an afternoon, as predicted. Stage 3 (MCUboot) proved the big
+machinery and found one real defect, still open.
+
+**Proven on this SoC, third architecture (Xtensa):**
+
+* Swap mode: `SWAP_SCRATCH`, pinned per-board via `bringup/sysbuild-esp32s3.conf`
+  passed as `-DSB_EXTRA_CONF_FILE` so it overrides the common OFFSET pin.
+  Upstream carves ESP32 out of offset-preference and ships a scratch partition
+  in its own table; both halves of the build verified to agree.
+* MCUboot swaps, and **the confirm deadline + revert work unaided**: a deploy
+  whose new image could not be reached was reverted by the deadline's reboot --
+  MCUboot's own console (enabled on UART0 by
+  `bringup/esp32s3-mcuboot-console.conf`) shows `Swap type: test` on the deploy
+  boot and `Swap type: revert` 60 s later. The §6 safety property now holds on
+  RP2350, nRF52840 and ESP32-S3.
+* The **runtime-side single-channel demux**: a full 140 KB upload over the
+  shared USB-Serial/JTAG link, with clean demultiplexed application logs in
+  container stdio. First hardware target for `RUNTT_CHANNELS=1`.
+
+**The open defect, and the reason the board is not yet promotable: after a
+software reset (`os reset`, or the deadline's reboot), the USB-Serial/JTAG SMP
+receive path is dead** while the console TX still works. A hard reset restores
+it. So every deploy's post-swap reconnect fails, the host cannot confirm, and
+the deadline dutifully reverts a good image 60 s later. Suspect:
+`serial_esp32_usb` RX (or the ROM's USB session state) across warm resets.
+Next session: instrument that driver, or cross-check by moving SMP to UART0 --
+if SMP survives warm reboot on the CH343 bridge, the driver is convicted.
+
+**Three bench gotchas worth not rediscovering:**
+
+* MCUboot's scratch swap logs NOTHING at INF between "Swap type: X" and
+  "Jumping" -- a completed swap and a skipped one read identically. The trailer
+  state on the NEXT boot is the evidence (`image_ok=0x3` after a swap the
+  previous line claimed was "test" proves the swap ran).
+* The chip parks in the ROM downloader if esptool's closing hard-reset does not
+  take: ROM USB device enumerated, no console, no SMP. `esptool run` recovers
+  it. Looks exactly like a bricked board and is not.
+* The USB-Serial/JTAG re-enumerates on hard reset (stale fds for any holder)
+  but NOT on soft reset. The CH343 UART bridge survives everything, which is
+  why the MCUboot witness console lives there.
+
+---
+
 *Co-authored with Claude*
