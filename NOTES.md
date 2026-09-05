@@ -552,14 +552,29 @@ machinery and found one real defect, still open.
   shared USB-Serial/JTAG link, with clean demultiplexed application logs in
   container stdio. First hardware target for `RUNTT_CHANNELS=1`.
 
-**The open defect, and the reason the board is not yet promotable: after a
-software reset (`os reset`, or the deadline's reboot), the USB-Serial/JTAG SMP
-receive path is dead** while the console TX still works. A hard reset restores
-it. So every deploy's post-swap reconnect fails, the host cannot confirm, and
-the deadline dutifully reverts a good image 60 s later. Suspect:
-`serial_esp32_usb` RX (or the ROM's USB session state) across warm resets.
-Next session: instrument that driver, or cross-check by moving SMP to UART0 --
-if SMP survives warm reboot on the CH343 bridge, the driver is convicted.
+**The warm-reset RX defect: found, fixed, carried as a patch (2026-09-05).**
+The USB-Serial-JTAG's `SERIAL_OUT_RECV_PKT` interrupt is raised per received
+packet, not while data is available. Bytes already in the RX FIFO when the
+interrupt is enabled raise nothing -- and while the FIFO holds data the
+controller NAKs the host, so no packet can ever arrive to raise it. A software
+reset while the host streams (which is what `os reset` after an upload IS)
+guarantees a non-empty FIFO at the next boot's irq_rx_enable, because the
+controller and its FIFOs deliberately survive warm resets. Zephyr's driver
+already handles the mirror-image TX case (`irq_tx_enable` delivers the callback
+by hand when TX-ready is already true); the fix gives RX the same treatment.
+`patches/zephyr/0001-serial_esp32_usb-*.patch`, upstreamable, verified by the
+previously-failing deploy completing end to end: upload, warm reset, reconnect,
+confirm, resident. Matches the known issue class in arduino-esp32#9316.
+
+Found by enabling MCUboot's console and reading the trailer across boots rather
+than guessing: the swap had been working all along (it logs nothing at INF), and
+the deadline's revert of the unreachable image was the safety net doing its job
+on a third architecture -- the "failure" everyone chased for an hour was the
+platform working as designed around a one-line driver gap.
+
+CI also gained `west patch apply` in workspace assembly: it had never applied
+patches.yml, which was harmless while the only patch was defensive hardening and
+becomes load-bearing the day a board cannot deploy without its patch.
 
 **Three bench gotchas worth not rediscovering:**
 

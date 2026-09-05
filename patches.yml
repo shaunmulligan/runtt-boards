@@ -9,6 +9,24 @@
 # Verify with `west patch list`; `west patch clean` reverts modules to their
 # pinned revision.
 patches:
+  # The USB-Serial-JTAG RX deadlock that made every ESP32-S3 deploy fail.
+  #
+  # SERIAL_OUT_RECV_PKT is raised per received packet, not while data is
+  # available: bytes already in the RX FIFO when the interrupt is enabled raise
+  # nothing, and while the FIFO holds data the controller NAKs the host, so no
+  # packet can ever arrive to raise it. The reliable trigger is a software
+  # reset while the host streams -- the controller and FIFO survive warm resets
+  # by design -- which is exactly what `os reset` after an upload is. The fix
+  # mirrors the driver's own irq_tx_enable: if the condition is already true at
+  # enable time, deliver the callback by hand.
+  - path: zephyr/0001-serial_esp32_usb-deliver-rx-already-pending-at-irq-enable.patch
+    sha256sum: 2693244e111822e961b38ed3c4e15882cbfd2a3f6907618ebc830ce8727c585f
+    module: zephyr
+    author: Shaun Mulligan
+    email: shaun.mulligan@balena.io
+    date: 2026-09-05
+    upstreamable: true
+    # Add `issue:` with the upstream URL once filed (schema requires a URL).
   - path: mcuboot/0001-bound-find_last_idx-loops.patch
     sha256sum: 3e005fb30293d87acd2e3e5ccb0d8db4602159cbcb3167201eed8fa5a12d40c0
     module: mcuboot

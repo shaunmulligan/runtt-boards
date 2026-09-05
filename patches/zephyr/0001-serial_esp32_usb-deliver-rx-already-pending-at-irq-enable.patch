@@ -1,0 +1,41 @@
+diff --git a/drivers/serial/serial_esp32_usb.c b/drivers/serial/serial_esp32_usb.c
+index 22e19616203..cb2ffb77aff 100644
+--- a/drivers/serial/serial_esp32_usb.c
++++ b/drivers/serial/serial_esp32_usb.c
+@@ -171,10 +171,35 @@ static int serial_esp32_usb_irq_tx_ready(const struct device *dev)
+ 
+ static void serial_esp32_usb_irq_rx_enable(const struct device *dev)
+ {
+-	ARG_UNUSED(dev);
++	struct serial_esp32_usb_data *data = dev->data;
+ 
+ 	usb_serial_jtag_ll_clr_intsts_mask(USB_SERIAL_JTAG_INTR_SERIAL_OUT_RECV_PKT);
+ 	usb_serial_jtag_ll_ena_intr_mask(USB_SERIAL_JTAG_INTR_SERIAL_OUT_RECV_PKT);
++
++	/*
++	 * SERIAL_OUT_RECV_PKT is raised per received packet, not while data is
++	 * available: bytes already sitting in the RX FIFO when the interrupt is
++	 * enabled raise nothing -- and while the FIFO holds data the controller
++	 * NAKs further OUT transfers, so no new packet can ever arrive to raise
++	 * it. RX is then dead until a hardware reset.
++	 *
++	 * That happens whenever data lands before this enable. The reliable
++	 * reproducer is a software reset while the host is streaming: the
++	 * USB-Serial-JTAG controller and its FIFOs deliberately survive a warm
++	 * reset (so the ROM can log during early boot), so the new boot arms
++	 * this interrupt over a non-empty FIFO.
++	 *
++	 * Same shape as irq_tx_enable() above: if the condition is already
++	 * true, deliver the callback by hand. The callback drains the FIFO
++	 * (irq_rx_ready() reads data-available), the controller resumes ACKing,
++	 * and the next packet edges the interrupt normally.
++	 */
++	if (data->irq_cb != NULL && usb_serial_jtag_ll_rxfifo_data_available()) {
++		unsigned int key = irq_lock();
++
++		data->irq_cb(dev, data->irq_cb_data);
++		arch_irq_unlock(key);
++	}
+ }
+ 
+ static void serial_esp32_usb_irq_rx_disable(const struct device *dev)
