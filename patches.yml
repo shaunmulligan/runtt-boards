@@ -4,9 +4,10 @@
 # and `west patch apply` re-applies this. The only thing maintained here is the
 # diff, which should disappear once the fix lands upstream.
 #
-#   west patch apply -l patches.yml -b patches
+#   west patch -l patches.yml -b patches apply
 #
-# Verify with `west patch list`; `west patch clean` reverts modules to their
+# Verify with `west patch -l patches.yml -b patches list`; the same flags with
+# `clean` revert modules to their
 # pinned revision.
 patches:
   # The USB-Serial-JTAG RX deadlock that made every ESP32-S3 deploy fail.
