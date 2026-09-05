@@ -576,6 +576,70 @@ CI also gained `west patch apply` in workspace assembly: it had never applied
 patches.yml, which was harmless while the only patch was defensive hardening and
 becomes load-bearing the day a board cannot deploy without its patch.
 
+## ESP32-S3 over USB-OTG: the dual-CDC contract works; warm-reset re-enumeration does not
+
+**2026-09-05.** The board runs the whole contract over the dual CDC-ACM composite
+on `usb_otg` (dwc2), which is the configuration the roadmap predicted would port
+directly. A deploy completed end to end and was confirmed:
+
+```
+Swap type: test -> full scratch swap -> Jumping to the first image slot
+49 host control transfers, 12 SETUP events, mcu: image confirmed
+```
+
+Enumeration, `describe`, `/dev/runtt` symlinks keyed off the MAC, upload, swap,
+boot, confirm, and revert-when-unconfirmed all work. What does not work reliably
+is the device coming back on the bus after the warm reset that `os reset`
+performs.
+
+### The measurement, because the correlation is the whole finding
+
+| image | console | USB debug logging | deploy |
+|---|---|---|---|
+| no-deadline build | `cdc_acm_log` | off | FAIL x3 |
+| same + console on uart0 | `uart0` | off | FAIL |
+| same + `CONFIG_BOOT_DELAY=1500` | `uart0` | off | FAIL |
+| same + `UDC_DRIVER_LOG_LEVEL_DBG` | `uart0` | **on** | **CONFIRMED x2** |
+
+Verbose 2/2, quiet 0/5. Reproducible, so not a race that happened to win.
+
+**Eliminated by test, not by reasoning:**
+
+* *Console routing.* Moving `zephyr,console` off `cdc_acm_log` to `uart0`
+  changed nothing, so this is not the log backend blocking on a CDC channel
+  that has not enumerated.
+* *A timing margin before USB init.* 1.5 s of `CONFIG_BOOT_DELAY` -- which lands
+  before APPLICATION-level init, verified at `kernel/init.c:311` -- changed
+  nothing.
+* *A missing peripheral reset.* `usb_wrap_hal_init()` already calls
+  `_usb_wrap_ll_reset_register()` (pulses `SYSTEM.perip_rst_en0.usb_rst`), and
+  the quirk calls it from `.pre_enable`, before core init. A patch adding a
+  reset would have fixed something that is not broken.
+
+### The hypothesis to test next
+
+The quirk disables the PHY pad only in `.disable`
+(`usb_wrap_ll_phy_enable_pad(false)`), never at init. Across
+`RTC_SW_CPU_RST` the pad plausibly stays enabled from the previous boot, so the
+host never observes a detach and has no attach edge to re-enumerate on. That
+fits every result above: a delay *before* USB init cannot help because it
+creates no detach, while verbose logging stretches the enumeration conversation
+until the host re-probes of its own accord.
+
+If that is right, the fix is a deliberate detach at init -- disable the PHY pad,
+hold it long enough for the host to notice, then enable -- in the ESP32 dwc2
+quirk, alongside the `serial_esp32_usb` patch this repository already carries.
+Confirm it first by watching `dmesg -w` across a warm reset: if the host logs no
+disconnect, the hypothesis holds.
+
+### Bench cost worth knowing
+
+Every flash needs the download-mode dance (hold BOOT, tap RESET, release BOOT)
+because the running application owns the PHY, and every warm-reset failure needs
+a hard RESET to get USB back. Budget two button presses per iteration.
+
+---
+
 **Four bench gotchas worth not rediscovering:**
 
 * MCUboot's scratch swap logs NOTHING at INF between "Swap type: X" and
