@@ -481,7 +481,50 @@ def flash_esptool(b, pairs, extra=(), port=None):
     for img, addr in list(pairs) + list(extra):
         cmd += [f"{addr:#x}", str(img)]
     run(cmd)
-    print("  done. The board resets into the image just written.")
+
+    # VERIFY the boot rather than announce it, the same rule flash_uf2 learned
+    # the hard way. esptool does verify what it wrote -- it reports a hash per
+    # region -- so unlike BOOTSEL the write itself is not in doubt. What is in
+    # doubt is the reset: esptool's closing hard_reset does not reliably take on
+    # this SoC, and the board parks in the ROM downloader with the image
+    # correctly on flash and nothing on the bus.
+    #
+    # The observable is the ROM's own USB device going away, because a
+    # provisioned board's application takes the single USB PHY off the ROM when
+    # it boots. Absence of that device is the only thing that means "running".
+    rom = b["program"].get("rom_usb")
+    if not rom:
+        return
+    import time
+    for _ in range(20):
+        if not usb_present(rom):
+            print("  flashed: the board left the ROM downloader and is running it.")
+            return
+        time.sleep(0.5)
+    # Not fatal, and not success either. The flash is written and verified; only
+    # the reset did not happen, and saying so is more use than either claiming
+    # victory or failing the command.
+    print(f"\n  the image is written and verified, but USB {rom} is still the ROM\n"
+          "  downloader 10 s later, so the board has not started it. esptool's\n"
+          "  closing reset does not always take on this SoC.\n"
+          "  Press RESET on the board to run it.")
+
+
+def usb_present(vidpid):
+    """True if a USB device with this vid:pid is attached, via sysfs.
+
+    sysfs rather than `lsusb`, so this needs no extra tool on the host -- the
+    same reasoning that keeps the UF2 path on findmnt and udisksctl.
+    """
+    vid, _, pid = vidpid.lower().partition(":")
+    for d in pathlib.Path("/sys/bus/usb/devices").glob("*"):
+        try:
+            if ((d / "idVendor").read_text().strip().lower() == vid
+                    and (d / "idProduct").read_text().strip().lower() == pid):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def require_backup(b):

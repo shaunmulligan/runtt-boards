@@ -672,6 +672,48 @@ The deploy used for this was a no-op -- the image already in slot 0 -- so runtt
 went straight to the resident loop with no flash write, which keeps the test
 about the transport rather than the update path.
 
+### Provisioning: check six, passed 2026-09-07
+
+All three writes in one esptool invocation, each hash-verified by esptool
+itself:
+
+```
+0x000000  MCUboot
+0x020000  confirmed slot-0 image   1376256 bytes -> 87928 compressed (4.8 s)
+0x3b0000  identity record          32 bytes
+```
+
+The `--pad` slot image is 1344 K of mostly 0xff, which sounded wasteful and is
+not: it compresses to 88 K on the wire.
+
+The board then reported exactly what the check asks for, and with traceability
+back to the artefact:
+
+```
+/dev/runtt/by-serial/esp-01-mgmt        the identity record took
+describe -> idle: true, provisioned: true, serial: "esp-01",
+            app_version: "0.0.0-idle"
+slot 0 hash=47bd6967...                 the digest imgtool verify reported
+                                        on provision-slot0.bin
+```
+
+**But `runtt-board provision` does not leave the board running it.** esptool's
+closing `hard_reset` parks the chip in the ROM downloader -- gotcha 2 below --
+and `esptool run` did not recover it either. The image is on flash, verified,
+and nothing is on the bus. A plain RESET press starts it.
+
+So flash_esptool() now verifies the boot rather than announcing it, the same
+rule flash_uf2() learned: the observable is the ROM's USB device (303a:1001)
+DISAPPEARING, because a provisioned board's application takes the single PHY off
+the ROM when it boots. If it is still there ten seconds later the tool says the
+image is written and verified but not started, and to press RESET.
+
+Deliberately not fatal, and that is the difference from the UF2 case. A stuck
+BOOTSEL means the write failed; here esptool has already verified every region,
+so only the reset is missing. Printing "done. The board resets into the image
+just written" -- which is what it did before -- was a prediction formatted as a
+fact, the same defect d3d74fe fixed for UF2.
+
 ### Bench cost
 
 Every flash needs the download-mode dance (hold BOOT, tap RESET, release BOOT)

@@ -163,6 +163,10 @@ boards:
     program:
       method: esptool
       chip: esp32s3
+      # The ROM's own USB device. Its DISAPPEARANCE is how runtt-board knows the
+      # board actually started the image it just wrote: a provisioned board's
+      # application takes the single USB PHY off the ROM when it boots.
+      rom_usb: "303a:1001"
     identity:
       # storage_partition from partitions_0x0_amp_4M.dtsi. A plain flash
       # offset, unlike RP2040's XIP-mapped 0x101b0000 -- esptool addresses

@@ -115,7 +115,8 @@
       "notes": "Third architecture, and the first Espressif board in Zephyr to declare cdc-acm nodes. The S3 muxes one USB PHY between the ROM's USB-Serial/JTAG and USB-OTG, so the running application owns the connector \u2014 which is why re-provisioning needs the BOOT button while a factory-fresh board does not. Requires deferred logging: see the snippet conf in runtt-zephyr-module",
       "program": {
         "method": "esptool",
-        "chip": "esp32s3"
+        "chip": "esp32s3",
+        "rom_usb": "303a:1001"
       },
       "identity": {
         "offset": 3866624
