@@ -93,7 +93,7 @@
       "name": "Waveshare ESP32-S3 (DevKitC-compatible)",
       "soc": "ESP32-S3",
       "status": "in-progress",
-      "notes": "Contract proven over the dual-CDC composite on USB-OTG: describe, logs to container stdio, and a deploy that uploads, swaps and confirms \u2014 four of the six PORTING.md checks. Outstanding: the unplug case, and a provisioning image on a factory-fresh board. See NOTES.md"
+      "notes": "Contract proven over the dual-CDC composite on USB-OTG: describe, logs to container stdio, a deploy that uploads/swaps/confirms, revert on an unconfirmed image, and unplug exiting non-zero \u2014 five of the six PORTING.md checks. Outstanding only: a provisioning image on a factory-fresh board, which needs a provision mode in build-esp32s3.sh and an esptool method in runtt-board. See NOTES.md"
     },
     {
       "id": "adafruit_feather_canbus_rp2040/rp2040/mcuboot",

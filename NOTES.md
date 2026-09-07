@@ -649,6 +649,29 @@ The lesson worth carrying: the failing and succeeding builds differed in more
 than one way for most of the investigation. Reducing to a single-variable diff
 between two `.config` files is what turned a correlation into a cause.
 
+### Unplug: check five, passed 2026-09-07
+
+Exercised against a resident session that had been streaming the board's logs
+for 46 hours -- which is also the deferred-logging fix holding up over two days
+of uptime. Pulling the USB-C cable:
+
+```
+heartbeat 1 failed: ... Broken pipe        08:23:03
+heartbeat 2 failed: ... Broken pipe        08:23:08
+runtt: lost contact with the device after 2 heartbeats
+exit code 1
+```
+
+Non-zero, so a restart policy fires, and detected in ~10 s rather than hanging.
+Identical behaviour to the other boards despite one S3-specific difference worth
+knowing: the on-board hub and the CH343 witness hang off the same USB-C
+connector, so unplugging takes the whole tree at once rather than just the
+board. It made no difference to the outcome.
+
+The deploy used for this was a no-op -- the image already in slot 0 -- so runtt
+went straight to the resident loop with no flash write, which keeps the test
+about the transport rather than the update path.
+
 ### Bench cost
 
 Every flash needs the download-mode dance (hold BOOT, tap RESET, release BOOT)
