@@ -358,6 +358,17 @@ def cmd_provision(args):
             print(f"\n  flash it with: {sys.argv[0]} flash {b['id']}")
             print(f"  then:          pyocd flash -t {b['program']['target']} "
                   f"--base-address {offset:#x} {record}")
+    elif method == "esptool":
+        print(f"\n  identity record: {record} -> {offset:#x}")
+        pairs = esptool_pairs(b, artefacts)
+        if not args.no_flash:
+            flash_esptool(b, pairs, extra=[(record, offset)],
+                          port=getattr(args, "port", None))
+        else:
+            print(f"\n  flash it with: {sys.argv[0]} flash {b['id']}")
+            print("  then:          esptool --chip "
+                  f"{b['program']['chip']} write_flash "
+                  f"{offset:#x} {record}")
     else:
         die(f"unknown program.method {method!r} for {b['name']}")
 
@@ -425,6 +436,54 @@ def flash_swd(b, images, extra=()):
     print("  done.")
 
 
+def esptool_pairs(b, images):
+    """Pair each provisioning image with the flash offset it belongs at.
+
+    The other two methods carry their addresses in the payload: a UF2 block has
+    one, and pyocd reads them out of a hex file. A raw .bin has none, so for
+    esptool the offsets live in boards.yml beside the artefact they describe and
+    are matched to the images by position -- which is the same order
+    release_images() returns them in.
+
+    Refuses to guess. A missing `at` is a manifest bug, and writing a
+    bootloader to the wrong offset is not a failure that announces itself.
+    """
+    ats = [a.get("at") for a in b["provision"]]
+    if len(images) != len(ats):
+        die(f"{b['name']}: {len(images)} image(s) but {len(ats)} declared in\n"
+            "  boards.yml `provision`. For esptool the two must correspond, since\n"
+            "  the offsets come from the manifest by position.")
+    missing = [a["as"] for a, at in zip(b["provision"], ats) if at is None]
+    if missing:
+        die(f"{b['name']}: boards.yml `provision` entries {missing} have no `at`\n"
+            "  offset, which esptool needs. Add one per artefact.")
+    return [(img, int(str(at), 0)) for img, at in zip(images, ats)]
+
+
+def flash_esptool(b, pairs, extra=(), port=None):
+    """Write offset/file pairs with esptool, in ONE invocation.
+
+    One invocation matters for the same reason the SWD path forbids a reset
+    between its two hex files: MCUboot, the confirmed slot-0 image and the
+    identity record are one logical write. esptool resets once, at the end,
+    after everything has landed.
+    """
+    tool = shutil.which("esptool") or shutil.which("esptool.py")
+    if tool is None:
+        die("esptool is not on PATH, and this board is flashed with it.\n"
+            "  Install it with:  pip install esptool\n"
+            "  (the SWD boards need pyocd the same way -- see the README)")
+
+    cmd = [tool, "--chip", b["program"]["chip"]]
+    if port:
+        cmd += ["--port", port]
+    cmd += ["--after", "hard_reset", "write_flash"]
+    for img, addr in list(pairs) + list(extra):
+        cmd += [f"{addr:#x}", str(img)]
+    run(cmd)
+    print("  done. The board resets into the image just written.")
+
+
 def require_backup(b):
     """Refuse to flash without a verified backup. This erase destroys a
     bootloader with no ROM loader behind it, so a truncated backup and no backup
@@ -457,8 +516,11 @@ def cmd_flash(args):
     for i in images:
         if not i.is_file():
             die(f"{i} is not a file. Build first: {sys.argv[0]} build {b['id']}")
-    if b["program"]["method"] == "uf2":
+    method = b["program"]["method"]
+    if method == "uf2":
         flash_uf2(b, images)
+    elif method == "esptool":
+        flash_esptool(b, esptool_pairs(b, images), port=args.port)
     else:
         flash_swd(b, images)
 
@@ -493,12 +555,16 @@ def main():
     p.add_argument("--ref", default="main", metavar="REF",
                    help="repo ref for boards.yml when it is not beside this script")
     p.add_argument("--no-flash", action="store_true", help="produce the image, do not write it")
+    p.add_argument("--port", default=None, metavar="DEV",
+                   help="serial port for esptool boards (default: let esptool find it, which is ambiguous with more than one board attached)")
     p.set_defaults(fn=cmd_provision)
 
     p = sub.add_parser("flash", help="write an image to a board")
     p.add_argument("board"); p.add_argument("images", nargs="*")
     p.add_argument("--release", default=None, metavar="TAG",
                    help="download images from this release instead of a local build")
+    p.add_argument("--port", default=None, metavar="DEV",
+                   help="serial port for esptool boards (default: let esptool find it, which is ambiguous with more than one board attached)")
     p.set_defaults(fn=cmd_flash)
 
     p = sub.add_parser("backup", help="back a board up before a destructive flash")

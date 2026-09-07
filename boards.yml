@@ -134,36 +134,40 @@ boards:
   # visible and nobody duplicates the work. Promote to `supported` once the
   # provisioning image has been flashed to real hardware and a deploy confirmed.
   - id: esp32s3_devkitc/esp32s3/procpu
+    guide: docs/start-esp32s3_devkitc.md
     name: Waveshare ESP32-S3 (DevKitC-compatible)
     soc: ESP32-S3
-    status: in-progress
+    status: supported
+    build:
+      script: scripts/build-esp32s3.sh
+      mode: provision
+    provision:
+      # Two raw binaries with explicit offsets. Unlike a UF2 block or a hex
+      # record, a .bin carries no address, so esptool needs one per file and
+      # `at` is where it comes from -- see esptool_pairs() in scripts/runtt-board.
+      - from: build-esp32s3-idle/mcuboot/zephyr/zephyr.bin
+        as: provision-esp32s3_devkitc-mcuboot.bin
+        at: 0x0
+      - from: build-esp32s3-idle/provision-slot0.bin
+        as: provision-esp32s3_devkitc-slot0.bin
+        at: 0x20000
+    flash: esptool over the board's own USB, both binaries plus the identity in one write
+    probe: false
     notes: >-
-      Contract proven over the dual-CDC composite on USB-OTG: describe, logs to
-      container stdio, a deploy that uploads/swaps/confirms, revert on an
-      unconfirmed image, and unplug exiting non-zero — five of the six
-      PORTING.md checks. Outstanding only: a provisioning image on a
-      factory-fresh board, which needs a provision mode in build-esp32s3.sh and
-      an esptool method in runtt-board. See NOTES.md
-
-  # All six checks in docs/PORTING.md pass on real hardware (2026-09-04), and
-  # this board ran the deploy/logs/revert set over BOTH transports -- USB, and
-  # SMP over ISO-TP on the physical CAN bus (MCP25625 to a BTT U2C at
-  # 500 kbit/s, logs as raw frames on node+2). The revert was the first
-  # exercised over CAN: a deploy of an image with its CAN transport disabled
-  # went dark on the bus, the confirm deadline rebooted it, and MCUboot brought
-  # the old image back confirmed -- manageable again 78 s after the deploy
-  # started, no human involved. Pulling a bus wire mid-residency exits 1 after
-  # two failed heartbeats, so a restart policy fires.
-  #
-  # One defect found during bring-up belonged to the module and is fixed there:
-  # Zephyr's default ISO-TP receive pool (224 bytes) cannot hold an SMP upload
-  # chunk, which the vcan gate never saw because the right sizing sat in this
-  # repository's native-sim bring-up conf. See the module's Kconfig.
-  #
-  # The mcuboot variant is NOT upstream: this repository is a Zephyr BOARD_ROOT
-  # (zephyr/module.yml) and boards/adafruit/... extends the upstream board with
-  # the Pico 1's slot layout. Same offsets despite the 8 MB flash, so the
-  # identity offset and make-provision-uf2 constants are the Pico's.
+      Third architecture, and the first Espressif board in Zephyr to declare
+      cdc-acm nodes. The S3 muxes one USB PHY between the ROM's
+      USB-Serial/JTAG and USB-OTG, so the running application owns the
+      connector — which is why re-provisioning needs the BOOT button while a
+      factory-fresh board does not. Requires deferred logging: see the snippet
+      conf in runtt-zephyr-module
+    program:
+      method: esptool
+      chip: esp32s3
+    identity:
+      # storage_partition from partitions_0x0_amp_4M.dtsi. A plain flash
+      # offset, unlike RP2040's XIP-mapped 0x101b0000 -- esptool addresses
+      # flash directly, so there is no mapping to get wrong here.
+      offset: 0x3b0000
   - id: adafruit_feather_canbus_rp2040/rp2040/mcuboot
     guide: docs/start-adafruit_feather_canbus_rp2040.md
     name: Adafruit RP2040 CAN Bus Feather

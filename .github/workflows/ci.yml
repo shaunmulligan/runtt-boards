@@ -99,10 +99,15 @@ jobs:
       - name: Install the ARM toolchain only
         if: steps.sdk.outputs.cache-hit != 'true'
         run: |
+          # Two toolchains now, not thirty-five. The ESP32-S3 is Xtensa, so
+          # promoting it to `supported` put it in the build matrix that
+          # boards.py derives from boards.yml -- and a matrix entry with no
+          # compiler fails the job rather than skipping the board.
           west sdk install \
             --version "${ZEPHYR_SDK_VERSION}" \
             --install-base "${GITHUB_WORKSPACE}" \
-            -t arm-zephyr-eabi
+            -t arm-zephyr-eabi \
+            -t xtensa-espressif_esp32s3_zephyr-elf
           du -sh "zephyr-sdk-${ZEPHYR_SDK_VERSION}"
 
       - name: Point Zephyr at it
