@@ -9,6 +9,10 @@ permissions:
 
 env:
   ZEPHYR_SDK_VERSION: 1.0.1
+  # Every toolchain the board matrix needs, named once. ARM covers RP2040,
+  # RP2350 and nRF52840; Xtensa covers the ESP32-S3. Still two rather than the
+  # ~35 in zephyrprojectrtos/ci, which is the point.
+  ZEPHYR_SDK_TOOLCHAINS: arm-zephyr-eabi xtensa-espressif_esp32s3_zephyr-elf
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -96,19 +100,43 @@ jobs:
           path: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}
           key: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}-arm
 
-      - name: Install the ARM toolchain only
-        if: steps.sdk.outputs.cache-hit != 'true'
+      # CHECK WHAT THE CACHE ACTUALLY CONTAINS, rather than trusting a cache
+      # hit. This step used to be `if: cache-hit != 'true'`, beside a comment
+      # claiming "the SDK is versioned, so the key can be exact and the cache
+      # never goes stale silently". It goes stale the moment the toolchain LIST
+      # changes: adding Xtensa for the ESP32-S3 did not change the key, the
+      # restore hit, this step was skipped, and the board's build failed at
+      # cmake with no compiler -- a failure that says nothing about the cause.
+      #
+      # Keying on the toolchain list would fix that one case and leave the trap
+      # for the next person. Verifying presence is self-healing: whatever the
+      # cache holds, the job ends up with the toolchains the matrix needs.
+      - name: Install the toolchains the matrix needs
         run: |
-          # Two toolchains now, not thirty-five. The ESP32-S3 is Xtensa, so
-          # promoting it to `supported` put it in the build matrix that
-          # boards.py derives from boards.yml -- and a matrix entry with no
-          # compiler fails the job rather than skipping the board.
+          set -euo pipefail
+          sdk="zephyr-sdk-${ZEPHYR_SDK_VERSION}"
+          missing=""
+          for t in ${ZEPHYR_SDK_TOOLCHAINS}; do
+            # The SDK lays toolchains out under gnu/; tolerate a flat layout too
+            # rather than depend on that detail.
+            if [ ! -d "${sdk}/gnu/${t}" ] && [ ! -d "${sdk}/${t}" ]; then
+              missing="${missing} ${t}"
+            fi
+          done
+          if [ -z "${missing}" ]; then
+            echo "  cache already has:${ZEPHYR_SDK_TOOLCHAINS// /, }"
+            du -sh "${sdk}"
+            exit 0
+          fi
+          echo "  missing from the cache:${missing}"
+          args=""
+          for t in ${ZEPHYR_SDK_TOOLCHAINS}; do args="${args} -t ${t}"; done
+          # shellcheck disable=SC2086
           west sdk install \
             --version "${ZEPHYR_SDK_VERSION}" \
             --install-base "${GITHUB_WORKSPACE}" \
-            -t arm-zephyr-eabi \
-            -t xtensa-espressif_esp32s3_zephyr-elf
-          du -sh "zephyr-sdk-${ZEPHYR_SDK_VERSION}"
+            ${args}
+          du -sh "${sdk}"
 
       - name: Point Zephyr at it
         run: echo "ZEPHYR_SDK_INSTALL_DIR=${GITHUB_WORKSPACE}/zephyr-sdk-${ZEPHYR_SDK_VERSION}" >> "$GITHUB_ENV"
