@@ -65,12 +65,25 @@ jobs:
       # not applying them was a silent gap: every build until now used an
       # unpatched tree, which mattered the day a patch became load-bearing (the
       # ESP32-S3 cannot complete a deploy without its serial driver fix).
-      # `west update` restores pristine sources, so apply after it, every time.
+      #
+      # CLEAN BEFORE APPLY, and it is not belt-and-braces. This step originally
+      # ran `apply` alone, on the stated assumption that "west update restores
+      # pristine sources". It does not, when the workspace comes from the cache
+      # above: a warm cache carries the modules with the patches ALREADY
+      # applied, `apply` then fails to re-apply them, and the job exits 1.
+      #
+      # That made the failure look unrelated to whatever change triggered it.
+      # The run that populates a fresh cache passes (it patches a pristine
+      # tree), and every run afterwards fails -- so it surfaced on the next
+      # branch pushed rather than on the commit that introduced it. `clean`
+      # reverts each module to its pinned revision, which is what makes this
+      # step idempotent against both a cold and a warm cache.
       - name: Apply the carried patches
         run: |
           # Global flags BEFORE the subcommand, and paths relative to the
           # manifest module (boards/), not the workspace: this west-patch
           # version rejects flags after `apply` with exit 2.
+          west patch -l patches.yml -b patches clean
           west patch -l patches.yml -b patches apply
           west patch -l patches.yml -b patches list
 
