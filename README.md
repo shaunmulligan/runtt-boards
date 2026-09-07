@@ -66,7 +66,7 @@ available.
 
 **Being brought up**, not yet published:
 
-* **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Contract proven over the dual-CDC composite on USB-OTG: describe, logs to container stdio, and a deploy that uploads, swaps and confirms — four of the six PORTING.md checks. Outstanding: the unplug case, and a provisioning image on a factory-fresh board. See NOTES.md
+* **Waveshare ESP32-S3 (DevKitC-compatible)** (ESP32-S3) — Contract proven over the dual-CDC composite on USB-OTG: describe, logs to container stdio, a deploy that uploads/swaps/confirms, revert on an unconfirmed image, and unplug exiting non-zero — five of the six PORTING.md checks. Outstanding only: a provisioning image on a factory-fresh board, which needs a provision mode in build-esp32s3.sh and an esptool method in runtt-board. See NOTES.md
 
 <!-- END GENERATED -->
 
