@@ -52,14 +52,26 @@ Start from [runtt-examples/app1](https://github.com/shaunmulligan/runtt-examples
 podman build --build-arg BOARD=esp32s3_devkitc/esp32s3/procpu -t my-app:v1 .
 ```
 
-The `runtt` snippet supplies this board's configuration, including one setting
-you must not override: **deferred logging**. With
+The `runtt` snippet supplies this board's configuration, including the one
+setting this SoC cannot do without: **deferred logging**. With
 `CONFIG_LOG_MODE_IMMEDIATE=y`, every log call is written synchronously from
 whichever context logs it — including the USB device thread and its interrupt
 handlers — and a blocking UART write inside enumeration misses the host's
-timing windows, so the composite never finishes coming up. The snippet sets
-`CONFIG_LOG_MODE_DEFERRED=y` for this SoC. If your application sets immediate
-mode, USB will stop working and nothing will say why.
+timing windows, so the composite never finishes coming up.
+
+**Your `prj.conf` cannot break this**, which is worth knowing because example
+applications do set immediate mode. Snippet fragments are merged *after*
+`prj.conf`, so the snippet's `CONFIG_LOG_MODE_DEFERRED=y` wins — measured on
+this board's target, not assumed. What does override it is a fragment merged
+later still: `-DEXTRA_CONF_FILE=...` (or the per-image
+`-D<app>_EXTRA_CONF_FILE=...`) on the build command line. Set immediate mode
+there and USB stops working with nothing to say why.
+
+One other thing to get right, because it fails *silently*: the snippet flag is
+named after the **application directory**, since that is the sysbuild image
+name. `-Dapp_SNIPPET=runtt` against a directory called `app1` applies no
+snippet at all, configures cleanly and exits zero — the resulting image has no
+USB contract, no SMP server and no runtt module in it.
 
 ## 3. Deploy
 

@@ -720,6 +720,66 @@ Every flash needs the download-mode dance (hold BOOT, tap RESET, release BOOT)
 because the running application owns the PHY. Budget two button presses per
 iteration, and prefer over-the-air deploys once the board is up.
 
+### Kconfig precedence for the log mode, measured
+
+The guide used to say an application setting `CONFIG_LOG_MODE_IMMEDIATE=y`
+would break USB on this board. That is only half right, and the half that is
+wrong is the half people would act on. Measured with `west build --cmake-only`
+for `esp32s3_devkitc/esp32s3/procpu`, reading the merged `.config`:
+
+| `CONFIG_LOG_MODE_IMMEDIATE=y` set in | merged result |
+|---|---|
+| the application's `prj.conf` (as `app-test` and both examples do) | `CONFIG_LOG_MODE_DEFERRED=y` — the snippet wins |
+| `-D<image>_EXTRA_CONF_FILE=<fragment>` | `CONFIG_LOG_MODE_IMMEDIATE=y` — the fragment wins |
+
+So snippet fragments merge after `prj.conf` and before `EXTRA_CONF_FILE`. The
+examples are safe on this board as they stand; a build-line fragment is the
+thing that can break it.
+
+**A second finding fell out of getting that test wrong first.** The initial run
+passed `-Dapp_SNIPPET=runtt` while the application directory was named `app1`.
+Sysbuild names images after the directory, so the flag matched no image: the
+configure succeeded, exited zero, and produced a `.config` with **0**
+`CONFIG_RUNTT_*` symbols. That is the same silent-ignore trap that let
+`build-feather.sh` ship Feather firmware with no contract in it, and it is why
+the CI step reads the linked ELF rather than trusting the build.
+
+---
+
+### Promotion broke CI twice, in the same shape
+
+Both failures were **cache or environment state, not code**, and both presented
+as the ESP32-S3 build being broken.
+
+1. **The SDK cache key did not name the toolchain set.** `zephyr-sdk-1.0.1-arm`
+   was unchanged by adding `-t xtensa-espressif_esp32s3_zephyr-elf`, so the
+   restore hit an ARM-only cache and `if: cache-hit != 'true'` skipped the
+   install. The step now verifies each required toolchain is actually present
+   and installs when any is missing, which is self-healing where a corrected
+   key would only have fixed this one instance.
+
+2. **`esptool` was never installed on the runner.** Zephyr's Espressif SoC
+   CMake wraps `find_program(esptool)` in a `FATAL_ERROR`, so the board failed
+   at *configure*:
+
+   ```
+   -- Found assembler: .../xtensa-espressif_esp32s3_zephyr-elf-gcc
+   CMake Error at zephyr/soc/espressif/common/CMakeLists.txt:8 (message):
+     esptool>=5.0.2 not found in PATH.
+   -- Configuring incomplete, errors occurred!
+   ```
+
+   `hal_espressif` declares it in its own `zephyr/requirements.txt`, which
+   `requirements-base.txt` does not cover. CI now installs every module's
+   declared requirements via `west packages pip`.
+
+**Why local builds never caught it:** provisioning an ESP32-S3 means installing
+esptool by hand, so this machine had it from stage 1 of bring-up. Reproducing
+the failure took removing esptool from `PATH` — same tree, same SDK, same
+patches — which produced the identical cmake invocation and error. Worth
+remembering as a class: a *host package* a board needs is invisible on the
+machine that brought the board up.
+
 ---
 
 **Four bench gotchas worth not rediscovering:**
