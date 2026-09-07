@@ -90,10 +90,37 @@
     },
     {
       "id": "esp32s3_devkitc/esp32s3/procpu",
+      "guide": "docs/start-esp32s3_devkitc.md",
       "name": "Waveshare ESP32-S3 (DevKitC-compatible)",
       "soc": "ESP32-S3",
-      "status": "in-progress",
-      "notes": "Contract proven over the dual-CDC composite on USB-OTG: describe, logs to container stdio, a deploy that uploads/swaps/confirms, revert on an unconfirmed image, and unplug exiting non-zero \u2014 five of the six PORTING.md checks. Outstanding only: a provisioning image on a factory-fresh board, which needs a provision mode in build-esp32s3.sh and an esptool method in runtt-board. See NOTES.md"
+      "status": "supported",
+      "build": {
+        "script": "scripts/build-esp32s3.sh",
+        "mode": "provision"
+      },
+      "provision": [
+        {
+          "from": "build-esp32s3-idle/mcuboot/zephyr/zephyr.bin",
+          "as": "provision-esp32s3_devkitc-mcuboot.bin",
+          "at": 0
+        },
+        {
+          "from": "build-esp32s3-idle/provision-slot0.bin",
+          "as": "provision-esp32s3_devkitc-slot0.bin",
+          "at": 131072
+        }
+      ],
+      "flash": "esptool over the board's own USB, both binaries plus the identity in one write",
+      "probe": false,
+      "notes": "Third architecture, and the first Espressif board in Zephyr to declare cdc-acm nodes. The S3 muxes one USB PHY between the ROM's USB-Serial/JTAG and USB-OTG, so the running application owns the connector \u2014 which is why re-provisioning needs the BOOT button while a factory-fresh board does not. Requires deferred logging: see the snippet conf in runtt-zephyr-module",
+      "program": {
+        "method": "esptool",
+        "chip": "esp32s3",
+        "rom_usb": "303a:1001"
+      },
+      "identity": {
+        "offset": 3866624
+      }
     },
     {
       "id": "adafruit_feather_canbus_rp2040/rp2040/mcuboot",

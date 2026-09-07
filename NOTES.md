@@ -672,11 +672,113 @@ The deploy used for this was a no-op -- the image already in slot 0 -- so runtt
 went straight to the resident loop with no flash write, which keeps the test
 about the transport rather than the update path.
 
+### Provisioning: check six, passed 2026-09-07
+
+All three writes in one esptool invocation, each hash-verified by esptool
+itself:
+
+```
+0x000000  MCUboot
+0x020000  confirmed slot-0 image   1376256 bytes -> 87928 compressed (4.8 s)
+0x3b0000  identity record          32 bytes
+```
+
+The `--pad` slot image is 1344 K of mostly 0xff, which sounded wasteful and is
+not: it compresses to 88 K on the wire.
+
+The board then reported exactly what the check asks for, and with traceability
+back to the artefact:
+
+```
+/dev/runtt/by-serial/esp-01-mgmt        the identity record took
+describe -> idle: true, provisioned: true, serial: "esp-01",
+            app_version: "0.0.0-idle"
+slot 0 hash=47bd6967...                 the digest imgtool verify reported
+                                        on provision-slot0.bin
+```
+
+**But `runtt-board provision` does not leave the board running it.** esptool's
+closing `hard_reset` parks the chip in the ROM downloader -- gotcha 2 below --
+and `esptool run` did not recover it either. The image is on flash, verified,
+and nothing is on the bus. A plain RESET press starts it.
+
+So flash_esptool() now verifies the boot rather than announcing it, the same
+rule flash_uf2() learned: the observable is the ROM's USB device (303a:1001)
+DISAPPEARING, because a provisioned board's application takes the single PHY off
+the ROM when it boots. If it is still there ten seconds later the tool says the
+image is written and verified but not started, and to press RESET.
+
+Deliberately not fatal, and that is the difference from the UF2 case. A stuck
+BOOTSEL means the write failed; here esptool has already verified every region,
+so only the reset is missing. Printing "done. The board resets into the image
+just written" -- which is what it did before -- was a prediction formatted as a
+fact, the same defect d3d74fe fixed for UF2.
+
 ### Bench cost
 
 Every flash needs the download-mode dance (hold BOOT, tap RESET, release BOOT)
 because the running application owns the PHY. Budget two button presses per
 iteration, and prefer over-the-air deploys once the board is up.
+
+### Kconfig precedence for the log mode, measured
+
+The guide used to say an application setting `CONFIG_LOG_MODE_IMMEDIATE=y`
+would break USB on this board. That is only half right, and the half that is
+wrong is the half people would act on. Measured with `west build --cmake-only`
+for `esp32s3_devkitc/esp32s3/procpu`, reading the merged `.config`:
+
+| `CONFIG_LOG_MODE_IMMEDIATE=y` set in | merged result |
+|---|---|
+| the application's `prj.conf` (as `app-test` and both examples do) | `CONFIG_LOG_MODE_DEFERRED=y` — the snippet wins |
+| `-D<image>_EXTRA_CONF_FILE=<fragment>` | `CONFIG_LOG_MODE_IMMEDIATE=y` — the fragment wins |
+
+So snippet fragments merge after `prj.conf` and before `EXTRA_CONF_FILE`. The
+examples are safe on this board as they stand; a build-line fragment is the
+thing that can break it.
+
+**A second finding fell out of getting that test wrong first.** The initial run
+passed `-Dapp_SNIPPET=runtt` while the application directory was named `app1`.
+Sysbuild names images after the directory, so the flag matched no image: the
+configure succeeded, exited zero, and produced a `.config` with **0**
+`CONFIG_RUNTT_*` symbols. That is the same silent-ignore trap that let
+`build-feather.sh` ship Feather firmware with no contract in it, and it is why
+the CI step reads the linked ELF rather than trusting the build.
+
+---
+
+### Promotion broke CI twice, in the same shape
+
+Both failures were **cache or environment state, not code**, and both presented
+as the ESP32-S3 build being broken.
+
+1. **The SDK cache key did not name the toolchain set.** `zephyr-sdk-1.0.1-arm`
+   was unchanged by adding `-t xtensa-espressif_esp32s3_zephyr-elf`, so the
+   restore hit an ARM-only cache and `if: cache-hit != 'true'` skipped the
+   install. The step now verifies each required toolchain is actually present
+   and installs when any is missing, which is self-healing where a corrected
+   key would only have fixed this one instance.
+
+2. **`esptool` was never installed on the runner.** Zephyr's Espressif SoC
+   CMake wraps `find_program(esptool)` in a `FATAL_ERROR`, so the board failed
+   at *configure*:
+
+   ```
+   -- Found assembler: .../xtensa-espressif_esp32s3_zephyr-elf-gcc
+   CMake Error at zephyr/soc/espressif/common/CMakeLists.txt:8 (message):
+     esptool>=5.0.2 not found in PATH.
+   -- Configuring incomplete, errors occurred!
+   ```
+
+   `hal_espressif` declares it in its own `zephyr/requirements.txt`, which
+   `requirements-base.txt` does not cover. CI now installs every module's
+   declared requirements via `west packages pip`.
+
+**Why local builds never caught it:** provisioning an ESP32-S3 means installing
+esptool by hand, so this machine had it from stage 1 of bring-up. Reproducing
+the failure took removing esptool from `PATH` — same tree, same SDK, same
+patches — which produced the identical cmake invocation and error. Worth
+remembering as a class: a *host package* a board needs is invisible on the
+machine that brought the board up.
 
 ---
 

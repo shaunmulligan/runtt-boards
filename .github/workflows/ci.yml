@@ -9,6 +9,10 @@ permissions:
 
 env:
   ZEPHYR_SDK_VERSION: 1.0.1
+  # Every toolchain the board matrix needs, named once. ARM covers RP2040,
+  # RP2350 and nRF52840; Xtensa covers the ESP32-S3. Still two rather than the
+  # ~35 in zephyrprojectrtos/ci, which is the point.
+  ZEPHYR_SDK_TOOLCHAINS: arm-zephyr-eabi xtensa-espressif_esp32s3_zephyr-elf
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -60,6 +64,29 @@ jobs:
           west update --narrow -o=--depth=1
           west list
           pip install --quiet -r zephyr/scripts/requirements-base.txt
+          # AND every MODULE's own declared requirements, which is a different
+          # set. hal_espressif declares `esptool`, and Zephyr's Espressif SoC
+          # CMake does `find_program(esptool)` behind a FATAL_ERROR -- so
+          # without it the ESP32-S3 fails at CONFIGURE time ("Configuring
+          # incomplete, errors occurred!"), which reads like a broken board
+          # port rather than a missing host package.
+          #
+          # This gap was invisible locally for the whole ESP32-S3 bring-up:
+          # provisioning a board means installing esptool by hand, so the
+          # developer machine always had it and CI never did.
+          #
+          # Driven by `west packages` rather than a hand-written list, so the
+          # next module's requirement arrives on its own. Zephyr's aggregate
+          # requirements.txt is filtered out deliberately: it pulls the doc,
+          # compliance and test extras, and requirements-base above is the part
+          # a firmware build needs.
+          reqs=$(west packages pip | grep -v 'zephyr/scripts/requirements.txt' || true)
+          if [ -n "${reqs}" ]; then
+            echo "module requirements: ${reqs}"
+            # Word splitting is intended: this is a list of `-r <path>` pairs.
+            # shellcheck disable=SC2086
+            pip install --quiet ${reqs}
+          fi
 
       # The patches are part of what "the pinned revision" means here, and CI
       # not applying them was a silent gap: every build until now used an
@@ -87,8 +114,17 @@ jobs:
           west patch -l patches.yml -b patches apply
           west patch -l patches.yml -b patches list
 
-      # 2 GB for the one toolchain we need. The SDK is versioned, so the key can
-      # be exact and the cache never goes stale silently.
+      # A few GB for the two toolchains the matrix needs -- not the ~35 in
+      # zephyrprojectrtos/ci, which came to 33 GB and exhausted the runner.
+      #
+      # THE KEY UNDERSTATES WHAT THIS HOLDS, and that is deliberate. It is now
+      # ARM plus Xtensa. Renaming the key to say so cost a green Pico build: a
+      # new key restores nothing, the install step then had to fetch the whole
+      # SDK rather than one toolchain, and the ARM build that had been passing
+      # for months started failing instead. The step below verifies the
+      # toolchains are present whatever the cache holds, so correctness does not
+      # rest on this string -- and an accurate name is not worth throwing away a
+      # warm several-GB cache for.
       - name: Cache the Zephyr SDK
         id: sdk
         uses: actions/cache@v4
@@ -96,14 +132,43 @@ jobs:
           path: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}
           key: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}-arm
 
-      - name: Install the ARM toolchain only
-        if: steps.sdk.outputs.cache-hit != 'true'
+      # CHECK WHAT THE CACHE ACTUALLY CONTAINS, rather than trusting a cache
+      # hit. This step used to be `if: cache-hit != 'true'`, beside a comment
+      # claiming "the SDK is versioned, so the key can be exact and the cache
+      # never goes stale silently". It goes stale the moment the toolchain LIST
+      # changes: adding Xtensa for the ESP32-S3 did not change the key, the
+      # restore hit, this step was skipped, and the board's build failed at
+      # cmake with no compiler -- a failure that says nothing about the cause.
+      #
+      # Keying on the toolchain list would fix that one case and leave the trap
+      # for the next person. Verifying presence is self-healing: whatever the
+      # cache holds, the job ends up with the toolchains the matrix needs.
+      - name: Install the toolchains the matrix needs
         run: |
+          set -euo pipefail
+          sdk="zephyr-sdk-${ZEPHYR_SDK_VERSION}"
+          missing=""
+          for t in ${ZEPHYR_SDK_TOOLCHAINS}; do
+            # The SDK lays toolchains out under gnu/; tolerate a flat layout too
+            # rather than depend on that detail.
+            if [ ! -d "${sdk}/gnu/${t}" ] && [ ! -d "${sdk}/${t}" ]; then
+              missing="${missing} ${t}"
+            fi
+          done
+          if [ -z "${missing}" ]; then
+            echo "  cache already has:${ZEPHYR_SDK_TOOLCHAINS// /, }"
+            du -sh "${sdk}"
+            exit 0
+          fi
+          echo "  missing from the cache:${missing}"
+          args=""
+          for t in ${ZEPHYR_SDK_TOOLCHAINS}; do args="${args} -t ${t}"; done
+          # shellcheck disable=SC2086
           west sdk install \
             --version "${ZEPHYR_SDK_VERSION}" \
             --install-base "${GITHUB_WORKSPACE}" \
-            -t arm-zephyr-eabi
-          du -sh "zephyr-sdk-${ZEPHYR_SDK_VERSION}"
+            ${args}
+          du -sh "${sdk}"
 
       - name: Point Zephyr at it
         run: echo "ZEPHYR_SDK_INSTALL_DIR=${GITHUB_WORKSPACE}/zephyr-sdk-${ZEPHYR_SDK_VERSION}" >> "$GITHUB_ENV"
@@ -125,6 +190,23 @@ jobs:
 
       - name: The module's contract assertion
         run: ./modules/runtt/tests/contract_version.sh
+
+      # WHEN A BUILD FAILS, SAY WHAT THE ENVIRONMENT WAS. Every fault in this
+      # job so far -- a cache holding one toolchain, a runner missing a host
+      # package -- was an environment fact that the build's own error described
+      # only obliquely ("Configuring incomplete", "no compiler"). Emitted as
+      # ::error:: so it lands in the run's annotations, which are readable
+      # without downloading logs.
+      - name: What the environment looked like, on failure
+        if: failure()
+        run: |
+          sdk="zephyr-sdk-${ZEPHYR_SDK_VERSION}"
+          tc=$(ls "${sdk}/gnu" 2>/dev/null | tr '\n' ' ' || echo "NO ${sdk}/gnu")
+          echo "::error title=SDK toolchains::${tc}"
+          echo "::error title=SDK dir::$(ls -d ${sdk} 2>/dev/null || echo missing) $(du -sh ${sdk} 2>/dev/null | cut -f1)"
+          echo "::error title=host packages::$(pip list 2>/dev/null | grep -iE '^(esptool|imgtool|west|cbor|cryptography|intelhex|click) ' | tr '\n' ' ')"
+          echo "::error title=esptool on PATH::$(command -v esptool || echo ABSENT)"
+          echo "::error title=cmake caches::$(ls -d build-* 2>/dev/null | tr '\n' ' ')"
 
       - name: Build for the Pico (RP2040), full contract
         working-directory: boards
