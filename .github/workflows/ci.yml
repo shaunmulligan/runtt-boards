@@ -117,17 +117,20 @@ jobs:
       # A few GB for the two toolchains the matrix needs -- not the ~35 in
       # zephyrprojectrtos/ci, which came to 33 GB and exhausted the runner.
       #
-      # The key names the toolchain SET as well as the version, because the set
-      # is half of what the cache contains. It said `-arm` while the install
-      # step below had grown a second toolchain, and the restore then hit a
-      # cache that could not satisfy the build. The step below verifies contents
-      # regardless, so this key is legibility rather than the guarantee.
+      # THE KEY UNDERSTATES WHAT THIS HOLDS, and that is deliberate. It is now
+      # ARM plus Xtensa. Renaming the key to say so cost a green Pico build: a
+      # new key restores nothing, the install step then had to fetch the whole
+      # SDK rather than one toolchain, and the ARM build that had been passing
+      # for months started failing instead. The step below verifies the
+      # toolchains are present whatever the cache holds, so correctness does not
+      # rest on this string -- and an accurate name is not worth throwing away a
+      # warm several-GB cache for.
       - name: Cache the Zephyr SDK
         id: sdk
         uses: actions/cache@v4
         with:
           path: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}
-          key: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}-arm-xtensa
+          key: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}-arm
 
       # CHECK WHAT THE CACHE ACTUALLY CONTAINS, rather than trusting a cache
       # hit. This step used to be `if: cache-hit != 'true'`, beside a comment
@@ -187,6 +190,23 @@ jobs:
 
       - name: The module's contract assertion
         run: ./modules/runtt/tests/contract_version.sh
+
+      # WHEN A BUILD FAILS, SAY WHAT THE ENVIRONMENT WAS. Every fault in this
+      # job so far -- a cache holding one toolchain, a runner missing a host
+      # package -- was an environment fact that the build's own error described
+      # only obliquely ("Configuring incomplete", "no compiler"). Emitted as
+      # ::error:: so it lands in the run's annotations, which are readable
+      # without downloading logs.
+      - name: What the environment looked like, on failure
+        if: failure()
+        run: |
+          sdk="zephyr-sdk-${ZEPHYR_SDK_VERSION}"
+          tc=$(ls "${sdk}/gnu" 2>/dev/null | tr '\n' ' ' || echo "NO ${sdk}/gnu")
+          echo "::error title=SDK toolchains::${tc}"
+          echo "::error title=SDK dir::$(ls -d ${sdk} 2>/dev/null || echo missing) $(du -sh ${sdk} 2>/dev/null | cut -f1)"
+          echo "::error title=host packages::$(pip list 2>/dev/null | grep -iE '^(esptool|imgtool|west|cbor|cryptography|intelhex|click) ' | tr '\n' ' ')"
+          echo "::error title=esptool on PATH::$(command -v esptool || echo ABSENT)"
+          echo "::error title=cmake caches::$(ls -d build-* 2>/dev/null | tr '\n' ' ')"
 
       - name: Build for the Pico (RP2040), full contract
         working-directory: boards
