@@ -64,6 +64,29 @@ jobs:
           west update --narrow -o=--depth=1
           west list
           pip install --quiet -r zephyr/scripts/requirements-base.txt
+          # AND every MODULE's own declared requirements, which is a different
+          # set. hal_espressif declares `esptool`, and Zephyr's Espressif SoC
+          # CMake does `find_program(esptool)` behind a FATAL_ERROR -- so
+          # without it the ESP32-S3 fails at CONFIGURE time ("Configuring
+          # incomplete, errors occurred!"), which reads like a broken board
+          # port rather than a missing host package.
+          #
+          # This gap was invisible locally for the whole ESP32-S3 bring-up:
+          # provisioning a board means installing esptool by hand, so the
+          # developer machine always had it and CI never did.
+          #
+          # Driven by `west packages` rather than a hand-written list, so the
+          # next module's requirement arrives on its own. Zephyr's aggregate
+          # requirements.txt is filtered out deliberately: it pulls the doc,
+          # compliance and test extras, and requirements-base above is the part
+          # a firmware build needs.
+          reqs=$(west packages pip | grep -v 'zephyr/scripts/requirements.txt' || true)
+          if [ -n "${reqs}" ]; then
+            echo "module requirements: ${reqs}"
+            # Word splitting is intended: this is a list of `-r <path>` pairs.
+            # shellcheck disable=SC2086
+            pip install --quiet ${reqs}
+          fi
 
       # The patches are part of what "the pinned revision" means here, and CI
       # not applying them was a silent gap: every build until now used an
@@ -91,14 +114,20 @@ jobs:
           west patch -l patches.yml -b patches apply
           west patch -l patches.yml -b patches list
 
-      # 2 GB for the one toolchain we need. The SDK is versioned, so the key can
-      # be exact and the cache never goes stale silently.
+      # A few GB for the two toolchains the matrix needs -- not the ~35 in
+      # zephyrprojectrtos/ci, which came to 33 GB and exhausted the runner.
+      #
+      # The key names the toolchain SET as well as the version, because the set
+      # is half of what the cache contains. It said `-arm` while the install
+      # step below had grown a second toolchain, and the restore then hit a
+      # cache that could not satisfy the build. The step below verifies contents
+      # regardless, so this key is legibility rather than the guarantee.
       - name: Cache the Zephyr SDK
         id: sdk
         uses: actions/cache@v4
         with:
           path: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}
-          key: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}-arm
+          key: zephyr-sdk-${{ env.ZEPHYR_SDK_VERSION }}-arm-xtensa
 
       # CHECK WHAT THE CACHE ACTUALLY CONTAINS, rather than trusting a cache
       # hit. This step used to be `if: cache-hit != 'true'`, beside a comment
