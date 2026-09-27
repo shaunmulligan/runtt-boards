@@ -149,9 +149,11 @@ jobs:
           sdk="zephyr-sdk-${ZEPHYR_SDK_VERSION}"
           missing=""
           for t in ${ZEPHYR_SDK_TOOLCHAINS}; do
-            # The SDK lays toolchains out under gnu/; tolerate a flat layout too
-            # rather than depend on that detail.
-            if [ ! -d "${sdk}/gnu/${t}" ] && [ ! -d "${sdk}/${t}" ]; then
+            # The compiler itself, not its directory: a directory can exist and
+            # be empty, and the compiler is what cmake goes looking for. The SDK
+            # lays toolchains out under gnu/; tolerate a flat layout too rather
+            # than depend on that detail.
+            if [ ! -x "${sdk}/gnu/${t}/bin/${t}-gcc" ] && [ ! -x "${sdk}/${t}/bin/${t}-gcc" ]; then
               missing="${missing} ${t}"
             fi
           done
@@ -161,13 +163,17 @@ jobs:
             exit 0
           fi
           echo "  missing from the cache:${missing}"
-          args=""
-          for t in ${ZEPHYR_SDK_TOOLCHAINS}; do args="${args} -t ${t}"; done
+          # ONE -t, then every toolchain. The option is argparse nargs="+" with
+          # the default store action, so a repeated -t REPLACES the earlier one:
+          # `-t arm-zephyr-eabi -t xtensa-...` installed Xtensa alone and exited
+          # 0. That went unnoticed while the cache still held ARM from before
+          # Xtensa was added; the first install from nothing, once the cache
+          # expired, built the Pico with no compiler.
           # shellcheck disable=SC2086
           west sdk install \
             --version "${ZEPHYR_SDK_VERSION}" \
             --install-base "${GITHUB_WORKSPACE}" \
-            ${args}
+            -t ${ZEPHYR_SDK_TOOLCHAINS}
           du -sh "${sdk}"
 
       - name: Point Zephyr at it
@@ -190,23 +196,6 @@ jobs:
 
       - name: The module's contract assertion
         run: ./modules/runtt/tests/contract_version.sh
-
-      # WHEN A BUILD FAILS, SAY WHAT THE ENVIRONMENT WAS. Every fault in this
-      # job so far -- a cache holding one toolchain, a runner missing a host
-      # package -- was an environment fact that the build's own error described
-      # only obliquely ("Configuring incomplete", "no compiler"). Emitted as
-      # ::error:: so it lands in the run's annotations, which are readable
-      # without downloading logs.
-      - name: What the environment looked like, on failure
-        if: failure()
-        run: |
-          sdk="zephyr-sdk-${ZEPHYR_SDK_VERSION}"
-          tc=$(ls "${sdk}/gnu" 2>/dev/null | tr '\n' ' ' || echo "NO ${sdk}/gnu")
-          echo "::error title=SDK toolchains::${tc}"
-          echo "::error title=SDK dir::$(ls -d ${sdk} 2>/dev/null || echo missing) $(du -sh ${sdk} 2>/dev/null | cut -f1)"
-          echo "::error title=host packages::$(pip list 2>/dev/null | grep -iE '^(esptool|imgtool|west|cbor|cryptography|intelhex|click) ' | tr '\n' ' ')"
-          echo "::error title=esptool on PATH::$(command -v esptool || echo ABSENT)"
-          echo "::error title=cmake caches::$(ls -d build-* 2>/dev/null | tr '\n' ' ')"
 
       - name: Build for the Pico (RP2040), full contract
         working-directory: boards
@@ -370,6 +359,26 @@ jobs:
 
   # boards.yml is the source of truth; this is what makes that true rather than
   # aspirational. A generator you have to remember to run is just a third copy.
+      # WHEN A BUILD FAILS, SAY WHAT THE ENVIRONMENT WAS. Every fault in this
+      # job so far -- a cache holding one toolchain, a runner missing a host
+      # package -- was an environment fact that the build's own error described
+      # only obliquely ("Configuring incomplete", "no compiler"). Emitted as
+      # ::error:: so it lands in the run's annotations, which are readable
+      # without downloading logs. LAST in the job, deliberately: `if: failure()`
+      # is evaluated when the step is reached, so a step placed before the
+      # builds is skipped for every build failure -- which is exactly what
+      # happened the first time it was needed.
+      - name: What the environment looked like, on failure
+        if: failure()
+        run: |
+          sdk="zephyr-sdk-${ZEPHYR_SDK_VERSION}"
+          tc=$(ls "${sdk}/gnu" 2>/dev/null | tr '\n' ' ' || echo "NO ${sdk}/gnu")
+          echo "::error title=SDK toolchains::${tc}"
+          echo "::error title=SDK dir::$(ls -d ${sdk} 2>/dev/null || echo missing) $(du -sh ${sdk} 2>/dev/null | cut -f1)"
+          echo "::error title=host packages::$(pip list 2>/dev/null | grep -iE '^(esptool|imgtool|west|cbor|cryptography|intelhex|click) ' | tr '\n' ' ')"
+          echo "::error title=esptool on PATH::$(command -v esptool || echo ABSENT)"
+          echo "::error title=cmake caches::$(ls -d build-* 2>/dev/null | tr '\n' ' ')"
+
   manifest:
     runs-on: ubuntu-24.04
     steps:
