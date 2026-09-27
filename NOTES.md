@@ -746,10 +746,10 @@ the CI step reads the linked ELF rather than trusting the build.
 
 ---
 
-### Promotion broke CI twice, in the same shape
+### Promotion broke CI three times, in the same shape
 
-Both failures were **cache or environment state, not code**, and both presented
-as the ESP32-S3 build being broken.
+All three were **cache or environment state, not code**. The first two presented
+as the ESP32-S3 build being broken; the third hid behind them for twenty days.
 
 1. **The SDK cache key did not name the toolchain set.** `zephyr-sdk-1.0.1-arm`
    was unchanged by adding `-t xtensa-espressif_esp32s3_zephyr-elf`, so the
@@ -772,6 +772,20 @@ as the ESP32-S3 build being broken.
    `hal_espressif` declares it in its own `zephyr/requirements.txt`, which
    `requirements-base.txt` does not cover. CI now installs every module's
    declared requirements via `west packages pip`.
+
+3. **`-t` twice installed one toolchain.** `west sdk install` declares `-t` as
+   argparse `nargs="+"` with the default store action, so
+   `-t arm-zephyr-eabi -t xtensa-…` kept only the last one: Xtensa installed,
+   ARM did not, and the step exited 0. Fault 1's fix ran this exact command,
+   found Xtensa missing from an ARM-only cache, and "healed" it -- into a tree
+   holding both, because ARM was already there. The cache key never re-saved,
+   so nothing noticed until GitHub evicted the unused cache after seven days
+   and the first install from nothing built the Pico with no compiler. Three
+   changes: one `-t` with every toolchain after it; the presence check tests
+   the compiler binary rather than its directory; and the on-failure
+   diagnostics step moved to the end of the job -- placed before the builds,
+   `if: failure()` was false when it was reached and it was skipped for the
+   very failure it was written for.
 
 **Why local builds never caught it:** provisioning an ESP32-S3 means installing
 esptool by hand, so this machine had it from stage 1 of bring-up. Reproducing
