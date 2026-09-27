@@ -46,6 +46,15 @@ RUN west init -l boards && west update --narrow -o=--depth=1
 # them the build fails at configure with "Missing jsonschema dependency".
 RUN pip install --no-cache-dir -r /ws/zephyr/scripts/requirements-base.txt
 
+# This repository is itself a Zephyr module (zephyr/module.yml, board_root: .):
+# the MCUboot board variants under boards/ live here, not upstream, and west
+# registers the manifest repo as a module, so they only need to be present.
+# Without them `BOARD=adafruit_feather_canbus_rp2040/rp2040/mcuboot` fails at
+# configure with "qualifiers not found". After the fetch layers on purpose, so
+# a board edit costs a copy rather than a workspace refetch.
+COPY zephyr/module.yml /ws/boards/zephyr/module.yml
+COPY boards /ws/boards/boards
+
 ENV ZEPHYR_BASE=/ws/zephyr
 # Where the module landed, for anything that still wants it explicitly. Builds
 # do NOT need it: west registered the module, so `west build` finds its Kconfig,
